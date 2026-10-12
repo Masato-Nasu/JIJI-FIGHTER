@@ -40,15 +40,23 @@ async function validateSavedVideo(page,label,stop){
  const ff=execFileSync('ffmpeg',['-hide_banner','-nostats','-i',path,'-vn','-af','volumedetect','-f','null','-'],{encoding:'utf8',stdio:['ignore','pipe','pipe']});
 }
 async function auditFile(page,label,stop){
- const promise=page.waitForEvent('download',{timeout:25000});
+ const promise=page.waitForEvent('download',{timeout:150000});
  if(stop)await page.locator('#recordToggle').click();
- const dl=await promise;
+ const dl=await promise.catch(async e=>{
+   const status=await page.locator('#jiji-mp4-status').textContent().catch(()=>null);
+   throw Error('Video export download missing; MP4 status='+String(status)+'; '+e.message);
+ });
  const path=join(tmp,label+(dl.suggestedFilename().endsWith('.mp4')?'.mp4':'.webm'));
  await dl.saveAs(path);
  const info=JSON.parse(execFileSync('ffprobe',['-v','error','-show_streams','-of','json',path],{encoding:'utf8'}));
  const streams=info.streams.map(x=>({type:x.codec_type,codec:x.codec_name}));
  if(!streams.some(x=>x.type==='audio')||!streams.some(x=>x.type==='video'))
    throw Error(label+' missing audio/video tracks '+JSON.stringify(streams));
+ 
+ if(label.startsWith('desktop')&&
+    (!streams.some(x=>x.type==='video'&&x.codec==='h264')||
+     !streams.some(x=>x.type==='audio'&&x.codec==='aac')))
+   throw Error(label+' is not H.264 video + AAC audio: '+JSON.stringify(streams));
  let stderr='';
  try{execFileSync('ffmpeg',['-hide_banner','-nostats','-i',path,'-vn','-af','volumedetect','-f','null','-'],
    {encoding:'utf8',stdio:['ignore','pipe','pipe']});}
