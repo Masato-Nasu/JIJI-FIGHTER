@@ -2,6 +2,9 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
+import {mkdtempSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {handleRecordingExport} from './linux-recording-export.mjs';
 const root=new URL('./',import.meta.url);
 // Reuse the same provider, parsing and filtering as the deployed game.
@@ -57,8 +60,22 @@ server.listen(0,'127.0.0.1',()=>{
   const url='http://127.0.0.1:'+server.address().port;
   console.log('JIJI FIGHTER v0.11.16\n'+url+'\n話題語の取得には初回30秒ほどかかる場合があります。\nこのターミナルは開いたままにしてください。終了: Ctrl+C');
   if(process.env.JIJI_NO_OPEN!=='1'){
-    const child=spawn('xdg-open',[url],{stdio:'ignore'});
-    child.on('error',()=>console.log('上記URLをブラウザで開いてください。'));
+    if(process.env.JIJI_CHROME_CLEAN==='1'){
+      // Chrome's old service workers can otherwise show the obsolete
+      // "Worker・WASM" popup even after the Linux export code is updated.
+      // Isolate this session without clearing the user's normal Chrome data.
+      const profile=mkdtempSync(join(tmpdir(),'jiji-fighter-chrome-'));
+      const args=['--user-data-dir='+profile,'--no-first-run','--no-default-browser-check','--new-window',url];
+      const child=spawn(process.env.JIJI_CHROME_BIN||'google-chrome',args,{stdio:'ignore'});
+      child.on('error',error=>{
+        console.error('Chromeの起動に失敗:',error.message);
+        console.log('Chromeで上記URLを開いてください。');
+      });
+      console.log('Chrome専用の新しいプロファイルで起動します。旧版のキャッシュは使いません。');
+    }else{
+      const child=spawn('xdg-open',[url],{stdio:'ignore'});
+      child.on('error',()=>console.log('上記URLをブラウザで開いてください。'));
+    }
   }
 });
 process.on('SIGINT',()=>{server.close();server.closeAllConnections();});
