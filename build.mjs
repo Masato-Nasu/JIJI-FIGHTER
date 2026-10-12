@@ -271,3 +271,50 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
  await fs.writeFile(file,h,'utf8');
  console.log('Recorded audio survives multiple sessions; BGM fades after blast + 0.8s tail.');
 }
+
+
+// GAME_SFX_RECORDING_MIX_20261012
+// Duplicate the game's synthesized oscillator signals into the same
+// MediaStreamDestination that carries BGM. Speaker playback stays unchanged.
+{
+ const fs=await import('node:fs/promises');
+ const path=new URL('./dist/index.html',import.meta.url);
+ let content=await fs.readFile(path,'utf8');
+ function updateOnce(before,after,why){
+   const n=content.split(before).length-1;
+   if(n!==1)throw Error('SFX mix source drift '+why+': '+n);
+   content=content.replace(before,after);
+ }
+ updateOnce("o.connect(g);g.connect(audioCtx.destination);o.start(t);o.stop(t+duration+.01);",
+    "o.connect(g);g.connect(audioCtx.destination);o.start(t);o.stop(t+duration+.01);\n"+
+    "      // Forward precisely the SFX events heard during gameplay to recording.\n"+
+    "      window.dispatchEvent(new CustomEvent('jiji:sfx',{detail:{frequency:f,duration,type,volume:volume*.32}}));",
+    'forward synthesized SFX to recorder');
+ const fxMixer=[
+ "  // Record SFX independently of music ON/OFF into the same video audio track.",
+ "  // Maintain one stream track for BGM + SFX (no duplicate speaker playback).",
+ "  window.__JIJI_SFX_ROUTED__=0;",
+ "  window.addEventListener('jiji:sfx',event=>{",
+ "    if(recorder?.state!=='recording'||!trackNodes)return;",
+ "    try{",
+ "      const {frequency,duration,type,volume}=event.detail;",
+ "      const context=trackNodes.context;",
+ "      if(context.state!=='running')return;",
+ "      const t=context.currentTime;",
+ "      const oscillator=context.createOscillator(),gain=context.createGain();",
+ "      oscillator.type=type;",
+ "      oscillator.frequency.setValueAtTime(frequency,t);",
+ "      oscillator.frequency.exponentialRampToValueAtTime(Math.max(35,frequency*.42),t+duration);",
+ "      gain.gain.setValueAtTime(volume,t);",
+ "      gain.gain.exponentialRampToValueAtTime(.0001,t+duration);",
+ "      oscillator.connect(gain);gain.connect(trackNodes.destination);",
+ "      oscillator.start(t);oscillator.stop(t+duration+.01);",
+ "      window.__JIJI_SFX_ROUTED__++;",
+ "    }catch(error){console.warn('Recording SFX mixer failed',error);}",
+ "  });",
+ "  function overlayText(s,x,y,font='18px monospace',align='left'){"
+ ].join('\n');
+ updateOnce("  function overlayText(s,x,y,font='18px monospace',align='left'){",fxMixer,'mix recorded SFX');
+ await fs.writeFile(path,content,'utf8');
+ console.log('BGM and synthesized SFX now share one recorded audio track.');
+}
