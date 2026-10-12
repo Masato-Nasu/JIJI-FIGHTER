@@ -548,6 +548,13 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
     for(const tr of bgmStream.getAudioTracks())stream.addTrack(tr);`);
  one("    recorder.onerror=e=>{console.warn('Recording error',e);resetUI();};",
      "    recorder.onerror=e=>{console.warn('Recording error; final data retained until onstop',e);};");
+ // EASY-only balance: gentler damage, longer recovery window and stronger pickups.
+ one("easy:{name:'EASY',damage:.5,invulnerability:.85}",
+     "easy:{name:'EASY',damage:.25,invulnerability:1.6}");
+ one("const gain=Math.min(20,100-hull);",
+     "const gain=Math.min(hullDifficulty==='easy'?40:20,100-hull);");
+ one("EASY：被弾ダメージ半減 ／ NORMAL：標準 ／ HARD：被弾ダメージ1.75倍",
+     "EASY：被弾ダメージ25％・無敵1.6秒・回復40 ／ NORMAL：標準 ／ HARD：被弾ダメージ1.75倍");
  // Preserve filenames in the source tree, but never reuse a cache-first URL
  // for executable assets in a new HTML build (including under an older SW).
  const encoderHash=createHash('sha256').update(await readFile(new URL('./encoder/worker.js',root))).digest('hex').slice(0,12);
