@@ -73,18 +73,30 @@ The original MP3 plays locally when **START MISSION** is tapped, and loops throu
 
 スマホでは **START MISSION** を押すとBGMが始まり、控えめな音量でループ再生されます。**SFXは初期ON**で、音量を下げています。**STOP GAME** を押すと開始画面に戻り、音楽も停止します。撃墜時は爆発中もBGMが続き、爆発後に約0.8秒の余韻を置いて約0.65秒でフェードアウトします。その後、録画を自動保存します。**録画動画にはBGMだけでなくレーザーや爆発などのSFXも収録します。**音が止まっている場合は **TAP MUSIC** を押してください。SFXは効果音だけの切り替えです。スマホの標準ギャラリーでWebM（Opus音声）の再生に対応していない場合は、ブラウザや対応する動画プレーヤーで開いてください。更新が見えない場合は、インストール済みアプリを一度完全に閉じて再度開いてください。
 
-## PC video codec / PC録画の音声互換性
+## PC video codec / PC録画の音声互換性（Linux Chrome）
 
-When a browser can record H.264 video with AAC audio, the MP4 is saved directly. Otherwise the PC exporter attempts to transcode the recording in the browser. This requires a large WebAssembly video engine and may fail or take longer on some PCs. If it fails, the original recording is **saved automatically** so it is not lost. The mobile workflow, which has been used successfully for X posting, is left unchanged.
+**Linux Mint + Google Chrome:** PC recordings use the operating system's FFmpeg for reliable H.264 video and AAC audio conversion when the game is started **locally** with `bash start-linux.sh`. The game serves a loopback-only conversion endpoint at `/api/export-mp4`. Recording bytes never leave your PC for conversion, and the existing mobile recording workflow remains unchanged.
 
-On Linux Mint, the reliable fallback uses the operating system FFmpeg. From the checked-out repository, run:
+Install FFmpeg and run the local version:
 
 ```bash
 sudo apt install ffmpeg
+git clone --branch fix/desktop-recording-01116 --single-branch https://github.com/Masato-Nasu/JIJI-FIGHTER.git
+cd JIJI-FIGHTER
+bash start-linux.sh
+```
+
+When a recording completes, the original is retained in memory and available through **「元動画を保存」**. On successful conversion, a H.264/AAC MP4 downloads automatically; **「MP4を保存」** retries the download manually if Chrome blocked it. If conversion fails, the WebM original is saved instead and may be re-saved using the on-screen button. The original phone capture/share path is not intercepted.
+
+**Important:** A copy running from a public Cloudflare Pages URL cannot access your Linux FFmpeg directly and will save the original recording rather than claim it is an X-compatible MP4. Run the local Linux server for automatic H.264/AAC MP4 export.
+
+There is also a manual FFmpeg converter for an already saved WebM recording:
+
+```bash
 bash scripts/convert-recording-linux.sh
 ```
 
-The script picks the latest `JIJI-FIGHTER*.webm` or `.mp4` recording in Downloads, creates `-X-COMPATIBLE.mp4`, then verifies that the video codec is H.264 and the audio codec is AAC. The source recording is preserved. You can also pass an exact recording path to the script as its first argument. Encoding a local WebM test clip to H.264/AAC was verified; success of the browser's automatic conversion is not yet guaranteed.
+The original recording is preserved.
 
 ## Install / ホーム画面に追加
 
