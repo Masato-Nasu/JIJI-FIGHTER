@@ -2,7 +2,7 @@
 
 Japanese current topics become three-dimensional wireframe enemies. Fly between two mirrored worlds, fire lasers and bombs, and break through six monochrome stages.
 
-**v0.11.15 · Installable PWA · PC / mobile · Japanese topics worldwide**
+**v0.11.16 · Installable PWA · PC / mobile · Japanese topics worldwide**
 
 **[PLAY JIJI FIGHTER / ゲームを起動](https://jiji-fighter.pages.dev/)** · [Source code](https://github.com/Masato-Nasu/JIJI-FIGHTER) · [LIVE WORDS API](https://jiji-fighter.pages.dev/api/trends)
 
