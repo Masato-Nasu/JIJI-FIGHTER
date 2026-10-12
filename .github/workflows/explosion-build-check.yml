@@ -4,6 +4,7 @@ on:
     paths:
       - build.mjs
       - scripts/test-music.mjs
+      - scripts/test-recorded-audio.mjs
       - sw.js
       - .github/workflows/explosion-build-check.yml
   workflow_dispatch:
@@ -12,7 +13,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,3 +42,5 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Play BGM in desktop and mobile browsers
         run: node scripts/test-music.mjs
+      - name: Decode saved recordings and verify audible BGM
+        run: node scripts/test-recorded-audio.mjs
