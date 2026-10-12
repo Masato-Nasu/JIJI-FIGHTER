@@ -446,7 +446,7 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
 @media(max-width:680px){#intro{padding:18px 16px 28px}#intro .logo-art{margin-top:6px}#intro .stage-choice-panel{margin:9px auto 10px}}
 @media(max-height:690px){#intro .modal-foot{margin-top:10px}#intro .stage-choice-panel{padding:9px 11px}}
 </style>`;
- replaceOne('</head>',menuCSS+'\\n</head>','course menu CSS');
+ replaceOne('</head>',menuCSS+'\n</head>','course menu CSS');
  const stageStart=h.indexOf('        <label class="stage-choose-label" for="stageChooser">');
  const stageEnd=stageStart<0?-1:h.indexOf('        </select>',stageStart);
  if(stageStart<0||stageEnd<0)throw Error('Cannot locate stage selection');
