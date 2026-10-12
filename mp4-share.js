@@ -5,7 +5,9 @@ if(window.__jijiMp4Bridge)return;window.__jijiMp4Bridge=true;console.info('JIJI 
 // Prefer native H.264/AAC MP4 capture where the browser actually supports it.
 // Preserve the constructor API and avoid FFmpeg initialization on those browsers.
 const NativeRecorder=window.MediaRecorder;
-const nativeTypes=['video/mp4;codecs="avc1.42E01E,mp4a.40.2"','video/mp4;codecs="avc1.42E01E"','video/mp4'];
+// A bare MP4 MIME type can still contain Opus audio. X requires AAC.
+// Only bypass conversion when both H.264 video and AAC audio are advertised.
+const nativeTypes=['video/mp4;codecs="avc1.42E01E,mp4a.40.2"'];
 const chosenType=nativeTypes.find(t=>NativeRecorder?.isTypeSupported?.(t));
 if(chosenType){
   window.MediaRecorder=new Proxy(NativeRecorder,{
