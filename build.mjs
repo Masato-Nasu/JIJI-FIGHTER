@@ -154,7 +154,7 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
     'let held=new Set(),shootHeld=false,bombHeld=false,pointerDrag=null,soundEnabled=true,audioCtx=null;','SFX initially ON');
   change('>SFX OFF</button>','>SFX ON</button>','SFX label');
   change('g.gain.setValueAtTime(volume,t);g.gain.exponentialRampToValueAtTime(.0001,t+duration);',
-    'g.gain.setValueAtTime(volume*.32,t);g.gain.exponentialRampToValueAtTime(.0001,t+duration);','gentle SFX volume');
+    'g.gain.setValueAtTime(volume*1.28,t);g.gain.exponentialRampToValueAtTime(.0001,t+duration);','SFX level matched approximately to BGM (+12 dB)');
   change('audio.volume=.48;','audio.volume=.28;','BGM initial volume');
   change('audio.muted=false;audio.volume=.55;audio.loop=true;',
     'audio.muted=false;audio.volume=.28;audio.loop=true;','BGM playback volume');
@@ -288,7 +288,7 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
  updateOnce("o.connect(g);g.connect(audioCtx.destination);o.start(t);o.stop(t+duration+.01);",
     "o.connect(g);g.connect(audioCtx.destination);o.start(t);o.stop(t+duration+.01);\n"+
     "      // Forward precisely the SFX events heard during gameplay to recording.\n"+
-    "      window.dispatchEvent(new CustomEvent('jiji:sfx',{detail:{frequency:f,duration,type,volume:volume*.32}}));",
+    "      window.dispatchEvent(new CustomEvent('jiji:sfx',{detail:{frequency:f,duration,type,volume:volume*1.28}}));",
     'forward synthesized SFX to recorder');
  const fxMixer=[
  "  // Record SFX independently of music ON/OFF into the same video audio track.",
