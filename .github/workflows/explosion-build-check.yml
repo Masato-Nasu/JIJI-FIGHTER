@@ -94,3 +94,4 @@ jobs:
           name: recording-validation
           path: .test-artifacts/
           retention-days: 7
+          include-hidden-files: true

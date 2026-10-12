@@ -108,6 +108,8 @@ try{
    await page.waitForTimeout(2100);
    await auditFile(page,(mobile?'mobile':'desktop')+'-take-'+take,true);
    await page.waitForFunction(()=>!window.JIJI_MEDIA?.recording,{timeout:9000});
+   const close=page.locator('#jiji-mp4-share').getByRole('button',{name:'閉じる',exact:true});
+   if(await close.count())await close.click();
    const mode=await page.evaluate(()=>window.JIJI_FIGHTER.state.mode);
    if(mode==='paused')await page.locator('#resumeButton').click();
    else if(mode!=='playing')throw Error('Unexpected game state after take: '+mode);
