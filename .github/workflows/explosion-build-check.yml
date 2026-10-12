@@ -14,6 +14,8 @@ on:
       - scripts/test-recorded-audio.mjs
       - scripts/test-sfx-recording.mjs
       - scripts/test-lethal-projectiles.mjs
+      - encoder/**
+      - scripts/test-recording-upgrade.mjs
       - sw.js
       - .github/workflows/explosion-build-check.yml
   workflow_dispatch:
@@ -23,6 +25,8 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      JIJI_TEST_OUTPUT: .test-artifacts
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -48,7 +52,7 @@ jobs:
       - name: Install browser tester
         run: |
           npm install --no-save playwright@1.56.1
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium chrome
       - name: Play BGM in desktop and mobile browsers
         run: node scripts/test-music.mjs
       - name: Verify lethal enemy shots trigger visible explosion on phones and PCs
@@ -63,3 +67,30 @@ jobs:
         run: node scripts/test-recorded-audio.mjs
       - name: Confirm SFX in desktop and mobile saved videos
         run: node scripts/test-sfx-recording.mjs
+      - name: Verify public static hosting without a local export API
+        run: JIJI_WEB_EXPORT=1 node scripts/test-recorded-audio.mjs
+      - name: Verify browser-only SFX and BGM conversion
+        run: JIJI_WEB_EXPORT=1 node scripts/test-sfx-recording.mjs
+      - name: Verify old PWA cache upgrade, queued failures, and recovery
+        run: node scripts/test-recording-upgrade.mjs
+      - name: Test installed Google Chrome local music and recording
+        env:
+          JIJI_CHROME_CHANNEL: chrome
+        run: |
+          google-chrome --version
+          node scripts/test-local-linux-recording.mjs
+          node scripts/test-recorded-audio.mjs
+      - name: Test installed Google Chrome static-web MP4 and SFX
+        env:
+          JIJI_CHROME_CHANNEL: chrome
+          JIJI_WEB_EXPORT: '1'
+        run: |
+          node scripts/test-recorded-audio.mjs
+          node scripts/test-sfx-recording.mjs
+      - name: Retain actual saved recordings for inspection
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recording-validation
+          path: .test-artifacts/
+          retention-days: 7

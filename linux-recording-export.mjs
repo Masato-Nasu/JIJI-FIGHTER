@@ -12,10 +12,10 @@ function error(res,status,message){
   if(!res.headersSent){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});}
   if(!res.writableEnded)res.end(JSON.stringify({error:message}));
 }
-function run(program,args){
+function run(program,args,signal){
   return new Promise((resolve,reject)=>{
     let output='',details='',settled=false;
-    const proc=spawn(program,args,{stdio:['ignore','pipe','pipe']});
+    const proc=spawn(program,args,{stdio:['ignore','pipe','pipe'],signal,timeout:330000,killSignal:'SIGKILL'});
     proc.stdout.on('data',chunk=>{if(output.length<64000)output+=chunk.toString()});
     proc.stderr.on('data',chunk=>{if(details.length<64000)details+=chunk.toString()});
     proc.on('error',err=>{settled=true;reject(err)});
@@ -29,6 +29,9 @@ export async function handleRecordingExport(req,res,origin){
   if(!/^(video\/webm|video\/mp4|application\/octet-stream)(?:;|$)/.test(type)){
     error(res,415,'Expected video recording');return;
   }
+  const controller=new AbortController();
+  const disconnected=()=>{if(!res.writableFinished)controller.abort();};
+  res.on('close',disconnected);
   const dir=await mkdtemp(join(tmpdir(),'jiji-fighter-video-'));
   const input=join(dir,type.startsWith('video/mp4')?'input.mp4':'input.webm');
   const output=join(dir,'recording.mp4');
@@ -48,8 +51,8 @@ export async function handleRecordingExport(req,res,origin){
       '-vf','pad=ceil(iw/2)*2:ceil(ih/2)*2',
       '-pix_fmt','yuv420p','-r','30',
       '-c:a','aac','-profile:a','aac_low','-b:a','128k','-ar','44100','-ac','2',
-      '-movflags','+faststart',output]);
-    const probe=JSON.parse(await run('ffprobe',['-v','error','-show_streams','-of','json',output]));
+      '-movflags','+faststart',output],controller.signal);
+    const probe=JSON.parse(await run('ffprobe',['-v','error','-show_streams','-of','json',output],controller.signal));
     const hasVideo=probe.streams?.some(s=>s.codec_type==='video'&&s.codec_name==='h264');
     const hasAudio=probe.streams?.some(s=>s.codec_type==='audio'&&s.codec_name==='aac');
     if(!hasVideo||!hasAudio)throw Error('Converted MP4 is missing H.264 video or AAC audio');
@@ -64,6 +67,7 @@ export async function handleRecordingExport(req,res,origin){
     error(res,/exceeds 512 MB/.test(String(e))?413:503,
       e.code==='ENOENT'?'FFmpeg is not installed. Run: sudo apt install ffmpeg':String(e.message||e).slice(0,900));
   }finally{
+    res.off('close',disconnected);
     await rm(dir,{recursive:true,force:true}).catch(()=>{});
   }
 }

@@ -1,5 +1,5 @@
 const PREFIX='jiji-fighter-'+encodeURIComponent(self.registration.scope)+'-';
-const CACHE=PREFIX+'v0.11.16-linux-mp4-music-recovery';
+const CACHE=PREFIX+'BUILD_ID';
 const CORE=['./','./index.html','./mp4-share.js','./linux-music-recovery.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png','./music/mazz-db-2017.mp3'];
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)));
@@ -18,12 +18,12 @@ self.addEventListener('fetch',event=>{
     event.respondWith(fetch(request).then(response=>{
       if(response.ok){const copy=response.clone();event.waitUntil(caches.open(CACHE).then(c=>c.put('./index.html',copy)));}
       return response;
-    }).catch(()=>caches.match(new URL('./index.html',scope).href)));
+    }).catch(()=>caches.open(CACHE).then(c=>c.match(new URL('./index.html',scope).href))));
     return;
   }
   if(!CORE.some(item=>new URL(item,scope).href===url.href))return;
   event.respondWith((async()=>{
-    const cached=await caches.match(request.url);
+    const cached=await (await caches.open(CACHE)).match(request.url);
     if(cached){
       const range=request.headers.get('range');
       if(range&&url.pathname.endsWith('.mp3')){

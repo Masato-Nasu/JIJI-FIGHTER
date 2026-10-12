@@ -1,5 +1,5 @@
 import {createServer} from 'node:http';
-import {readFile,mkdtemp} from 'node:fs/promises';
+import {readFile,mkdir,mkdtemp} from 'node:fs/promises';
 import {resolve,extname,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
@@ -11,6 +11,9 @@ const root=resolve('dist');
 const server=createServer(async(req,res)=>{
  try{
   const name=new URL(req.url,'http://localhost').pathname;
+  if(name==='/api/recording-capabilities'){
+    res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({backend:process.env.JIJI_WEB_EXPORT?'browser':'local-ffmpeg'}));return;
+  }
   if(name==='/api/export-mp4'){
     await handleRecordingExport(req,res,'http://127.0.0.1:'+server.address().port);return;
   }
@@ -25,8 +28,9 @@ const server=createServer(async(req,res)=>{
 });
 await new Promise(done=>server.listen(0,'127.0.0.1',done));
 const base='http://127.0.0.1:'+server.address().port;
-const output=await mkdtemp(join(tmpdir(),'jiji-sfx-'));
-const browser=await chromium.launch({headless:true,args:['--no-sandbox','--autoplay-policy=no-user-gesture-required']});
+if(process.env.JIJI_TEST_OUTPUT)await mkdir(process.env.JIJI_TEST_OUTPUT,{recursive:true});
+const output=await mkdtemp(join(process.env.JIJI_TEST_OUTPUT||tmpdir(),'jiji-sfx-'));
+const browser=await chromium.launch({headless:true,...(process.env.JIJI_CHROME_BIN?{executablePath:process.env.JIJI_CHROME_BIN}:{}),...(process.env.JIJI_CHROME_CHANNEL?{channel:process.env.JIJI_CHROME_CHANNEL}:{}),args:['--no-sandbox']});
 
 function run(tool,args){
  const r=spawnSync(tool,args,{encoding:'utf8'});
@@ -51,7 +55,7 @@ async function record(page,label,bgmOn){
  await page.keyboard.up('Space');
  const routed=await page.evaluate(()=>window.__JIJI_SFX_ROUTED__);
  if(routed<5)throw Error(label+': SFX were not sent to recording ('+routed+')');
- const pending=page.waitForEvent('download',{timeout:22000});
+ const pending=page.waitForEvent('download',{timeout:180000});
  await page.locator('#recordToggle').click();
  const download=await pending;
  const path=join(output,label+(download.suggestedFilename().endsWith('.mp4')?'.mp4':'.webm'));
@@ -67,7 +71,7 @@ async function record(page,label,bgmOn){
 }
 try{
  for(const mobile of [false,true]){
-  const ctx=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1280,height:780},isMobile:mobile,hasTouch:mobile,acceptDownloads:true});
+  const ctx=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1280,height:780},isMobile:mobile,hasTouch:mobile,userAgent:mobile?'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1':undefined,acceptDownloads:true});
   for(const [suffix,bgmOn] of [['sfx-only',false],['bgm-plus-sfx',true]]){
     const page=await ctx.newPage(),errors=[];
     page.on('pageerror',err=>errors.push(err.message));

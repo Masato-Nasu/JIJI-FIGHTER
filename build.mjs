@@ -383,7 +383,7 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
  await fs.copyFile(new URL('./mp4-share.js',import.meta.url),new URL('./dist/mp4-share.js',import.meta.url));
  const htmlPath=new URL('./dist/index.html',import.meta.url);
  let html=await fs.readFile(htmlPath,'utf8');
- if(!html.includes('src="mp4-share.js"')){
+ if(!/src=["'](?:\.\/)?mp4-share(?:\.[a-f0-9]+)?\.js["']/.test(html)){
    const script='<script src="./mp4-share.js"></script>';
    if(html.includes('</head>'))html=html.replace('</head>',script+'\n</head>');
    else if(html.includes('<body'))html=html.replace('<body',script+'\n<body');
@@ -520,4 +520,54 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
      'brief pause after a stage transition');
  await fs.writeFile(path,game,'utf8');
  console.log('TREND glyph density reduced: 3 opening words, max 4–7 live words by stage, no burst spawns; CLASSIC unchanged.');
+}
+
+// Recording-only corrections. Keep all established gameplay patches above intact.
+{
+ const {createHash}=await import('node:crypto');
+ let h=await readFile(outputHtml,'utf8');
+ const one=(from,to)=>{
+  if(h.split(from).length!==2)throw Error('Recording patch drift: '+from.slice(0,70));
+  h=h.replace(from,to);
+ };
+ one("  function download(blob,type){",`  function download(blob,type){
+    if(window.JIJI_EXPORT){void window.JIJI_EXPORT.saveRecording(blob);return;}`);
+ one("    if(trackNodes)return trackNodes.destination.stream;",`    if(trackNodes){
+      if(trackNodes.context.state==='suspended')trackNodes.context.resume().catch(console.warn);
+      return trackNodes.destination.stream;
+    }`);
+ // Prevent a new take from replacing recorder/parts while onstop is pending.
+ one("  async function beginRecording(){",`  async function beginRecording(){
+    if(recorder)return;`);
+ one("    const rw=1280,rh=Math.round(rw*Math.max(.45,Math.min(1.3,scene.clientHeight/Math.max(1,scene.clientWidth))));",
+     "    const rw=1280,rh=2*Math.round(rw*Math.max(.45,Math.min(1.3,scene.clientHeight/Math.max(1,scene.clientWidth)))/2);");
+ one("    const bgmStream=makeAudioStream();\n    if(bgmStream)for(const tr of bgmStream.getAudioTracks())stream.addTrack(tr);",`    const bgmStream=makeAudioStream();
+    if(!bgmStream||!bgmStream.getAudioTracks().some(t=>t.readyState==='live')){
+      resetUI();alert('録画用音声を開始できません。RECを押して再試行してください。');return;
+    }
+    for(const tr of bgmStream.getAudioTracks())stream.addTrack(tr);`);
+ one("    recorder.onerror=e=>{console.warn('Recording error',e);resetUI();};",
+     "    recorder.onerror=e=>{console.warn('Recording error; final data retained until onstop',e);};");
+ // Preserve filenames in the source tree, but never reuse a cache-first URL
+ // for executable assets in a new HTML build (including under an older SW).
+ const encoderHash=createHash('sha256').update(await readFile(new URL('./encoder/worker.js',root))).digest('hex').slice(0,12);
+ const names=[];
+ for(const name of ['mp4-share','linux-music-recovery']){
+  const bytes=await readFile(new URL(name+'.js',root));
+  const hash=createHash('sha256').update(bytes).update(encoderHash).digest('hex').slice(0,12);
+  const target=name+'.'+hash+'.js';names.push(target);
+  one('<script src="./'+name+'.js"></script>','<script src="./'+target+'"></script>');
+  await writeFile(new URL(target,out),bytes);
+  await rm(new URL(name+'.js',out));
+ }
+ await cp(new URL('encoder/',root),new URL('encoder/',out),{recursive:true});
+ const build=createHash('sha256').update(h).digest('hex').slice(0,12);
+ h=h.replace('</head>','<meta name="jiji-build" content="'+build+'">\n</head>');
+ let sw=await readFile(new URL('sw.js',root),'utf8');
+ for(let i=0;i<names.length;i++)sw=sw.replace(['mp4-share.js','linux-music-recovery.js'][i],names[i]);
+ sw=sw.replace('BUILD_ID',build);
+ await writeFile(new URL('sw.js',out),sw);
+ await writeFile(outputHtml,h);
+ await writeFile(new URL('_headers',out),'/*\n  Cache-Control: no-cache\n');
+ console.log('Recording build '+build+'; explicit exporter, versioned scripts, same-origin browser encoder.');
 }

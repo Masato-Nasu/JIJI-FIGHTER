@@ -25,10 +25,12 @@ proc.on('error',readyReject);
 proc.on('exit',code=>{if(!address)readyReject(Error('Local server exited: '+code+' '+log.slice(-800)))});
 try{
  await Promise.race([ready,new Promise((_,reject)=>setTimeout(()=>reject(Error('Local server start timed out: '+log)),15000))]);
- const js=await fetch(address+'/mp4-share.js',{cache:'no-store'});
+ const html=await (await fetch(address+'/')).text();
+ const exporter=html.match(/src="(.\/mp4-share\.[a-f0-9]+\.js)"/)[1];
+ const js=await fetch(new URL(exporter,address),{cache:'no-store'});
  if(!js.ok)throw Error('Linux recording bridge HTTP '+js.status);
  const body=await js.text();
- if(!body.includes('/api/export-mp4')||!body.includes('元動画を保存')||body.includes('Worker・WASMを初期化中'))
+ if(!body.includes('api/export-mp4')||!body.includes('元動画を保存')||body.includes('Worker・WASMを初期化中'))
   throw Error('Wrong/old video exporter served by local Linux server');
  // Real Linux server must support byte-range MP3 requests from Chrome.
  const musicRange=await fetch(address+'/music/mazz-db-2017.mp3',{headers:{Range:'bytes=0-1023'}});
@@ -37,7 +39,7 @@ try{
   throw Error('MP3 Content-Range invalid '+musicRange.headers.get('content-range'));
  const audioChunk=await musicRange.arrayBuffer();
  if(audioChunk.byteLength!==1024)throw Error('MP3 partial response length '+audioChunk.byteLength);
- const browser=await chromium.launch({headless:true,args:['--no-sandbox','--autoplay-policy=no-user-gesture-required']});
+ const browser=await chromium.launch({headless:true,...(process.env.JIJI_CHROME_BIN?{executablePath:process.env.JIJI_CHROME_BIN}:{}),...(process.env.JIJI_CHROME_CHANNEL?{channel:process.env.JIJI_CHROME_CHANNEL}:{}),args:['--no-sandbox']});
  try{
   const page=await browser.newPage();
   const errors=[];
@@ -61,12 +63,13 @@ try{
   const result=await page.evaluate(()=>({label:document.querySelector('#musicToggle')?.textContent,
    muted:document.querySelector('#bgm')?.muted,paused:document.querySelector('#bgm')?.paused}));
   if(result.paused||result.muted||result.label?.includes('ERROR'))throw Error('Music broken: '+JSON.stringify(result));
-  console.log('REAL LOCAL LINUX BGM OK, audio/MPEG HTTP 206, native Chrome playback');
+  console.log('REAL LOCAL LINUX BGM OK, audio/MPEG HTTP 206, browser playback (see selected Playwright executable)');
   // Force a genuine media load failure. Recovery must fetch the original
   // unmodified MP3 as a Blob and resume with the SAME audio element, preserving
   // the game's MediaStream audio recording graph.
   await page.evaluate(()=>{
    const audio=document.querySelector('#bgm');
+   window.JIJI_MUSIC_DIAGNOSTIC.recovered=false;
    audio.src='/__missing-music__.mp3';
    audio.load();
   });
@@ -98,7 +101,7 @@ try{
  if(!streams.some(s=>s.codec_type==='video'&&s.codec_name==='h264')||
     !streams.some(s=>s.codec_type==='audio'&&s.codec_name==='aac'))
   throw Error('H264/AAC absent from Linux MP4 '+JSON.stringify(streams.map(s=>[s.codec_type,s.codec_name])));
- console.log('LOCAL LINUX CHROME EXPORT OK:',address,'H264 + AAC',payload.length,'input bytes');
+ console.log('LOCAL LINUX EXPORT OK:',address,'H264 + AAC',payload.length,'input bytes');
 }finally{
  proc.kill('SIGINT');
  await rm(temp,{recursive:true,force:true});

@@ -1,8 +1,8 @@
 import {createServer} from 'node:http';
-import {readFile,mkdtemp} from 'node:fs/promises';
+import {readFile,mkdir,mkdtemp} from 'node:fs/promises';
 import {resolve,extname,join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawn} from 'node:child_process';
 import {chromium} from 'playwright';
 import {handleRecordingExport} from '../linux-recording-export.mjs';
 
@@ -12,7 +12,11 @@ const mimetypes={'.html':'text/html; charset=utf-8','.mp3':'audio/mpeg','.js':'t
 const server=createServer(async(req,res)=>{
  try{
   const path=new URL(req.url,'http://localhost').pathname;
+  if(path==='/api/recording-capabilities'){
+    res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({backend:process.env.JIJI_WEB_EXPORT?'browser':'local-ffmpeg'}));return;
+  }
   if(path==='/api/export-mp4'){
+    if(process.env.JIJI_WEB_EXPORT){res.writeHead(404);res.end('No server encoder in web test');return;}
     await handleRecordingExport(req,res,'http://127.0.0.1:'+server.address().port);return;
   }
   if(path==='/api/trends'){
@@ -27,25 +31,24 @@ const server=createServer(async(req,res)=>{
  }catch(e){res.writeHead(404);res.end(e.message);}
 });
 await new Promise(done=>server.listen(0,'127.0.0.1',done));
-const browser=await chromium.launch({headless:true,args:['--no-sandbox','--autoplay-policy=no-user-gesture-required']});
-const base='http://127.0.0.1:'+server.address().port;
-const tmp=await mkdtemp(join(tmpdir(),'jiji-recs-'));
-let saved=0;
-async function validateSavedVideo(page,label,stop){
- const promise=page.waitForEvent('download',{timeout:24000});
- if(stop)await page.locator('#recordToggle').click();
- const file=await promise;
- const path=join(tmp,label+(file.suggestedFilename().endsWith('.mp4')?'.mp4':'.webm'));
- await file.saveAs(path);
- const info=JSON.parse(execFileSync('ffprobe',['-v','error','-show_streams','-of','json',path],{encoding:'utf8'}));
- const a=info.streams.filter(x=>x.codec_type==='audio');
- const v=info.streams.filter(x=>x.codec_type==='video');
- if(!a.length||!v.length)throw Error(label+' saved file missing audio/video tracks: '+JSON.stringify(info.streams.map(x=>x.codec_type)));
- const ff=execFileSync('ffmpeg',['-hide_banner','-nostats','-i',path,'-vn','-af','volumedetect','-f','null','-'],{encoding:'utf8',stdio:['ignore','pipe','pipe']});
+const browser=await chromium.launch({headless:true,...(process.env.JIJI_CHROME_BIN?{executablePath:process.env.JIJI_CHROME_BIN}:{}),...(process.env.JIJI_CHROME_CHANNEL?{channel:process.env.JIJI_CHROME_CHANNEL}:{}),args:['--no-sandbox']});
+let base='http://127.0.0.1:'+server.address().port;
+let localServer;
+if(!process.env.JIJI_WEB_EXPORT){
+ localServer=spawn(process.execPath,['linux-server.mjs'],{env:{...process.env,JIJI_NO_OPEN:'1'},stdio:['ignore','pipe','pipe']});
+ base=await new Promise((resolve,reject)=>{
+  let log='';const timer=setTimeout(()=>reject(Error('Local server startup: '+log)),15000);
+  localServer.stdout.on('data',chunk=>{log+=chunk;const match=log.match(/http:\/\/127\.0\.0\.1:\d+/);if(match){clearTimeout(timer);resolve(match[0]);}});
+  localServer.on('error',reject);
+ });
 }
+console.log('TEST ORIGIN',base,process.env.JIJI_WEB_EXPORT?'static web (no conversion API)':'actual linux-server.mjs');
+if(process.env.JIJI_TEST_OUTPUT)await mkdir(process.env.JIJI_TEST_OUTPUT,{recursive:true});
+const tmp=await mkdtemp(join(process.env.JIJI_TEST_OUTPUT||tmpdir(),'jiji-recs-'));
+let saved=0;
 async function auditFile(page,label,stop){
  const promise=page.waitForEvent('download',{timeout:150000});
- if(stop)await page.locator('#recordToggle').click();
+ if(stop){await page.locator('#recordToggle').click();await page.evaluate(()=>{if(window.JIJI_FIGHTER.state.mode==='playing')document.querySelector('#pauseButton').click();});}
  const dl=await promise.catch(async e=>{
    const status=await page.locator('#jiji-mp4-status').textContent().catch(()=>null);
    throw Error('Video export download missing; MP4 status='+String(status)+'; '+e.message);
@@ -78,13 +81,14 @@ async function auditFile(page,label,stop){
  if(!match||!(Number(match[1])>-65))
    throw Error(label+' audio track is silent '+(match?.[0]||'no volume')+' '+stderr.slice(-250));
  saved++;
+ console.log('EXPORT BACKEND',await page.evaluate(()=>window.JIJI_EXPORT?.state));
  console.log(label+' RECORDING WITH AUDIO OK: '+match[1]+' dB '+JSON.stringify(streams));
 }
 
 try{
  for(const mobile of [false,true]){
   const context=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1180,height:700},
-   isMobile:mobile,hasTouch:mobile,acceptDownloads:true});
+   isMobile:mobile,hasTouch:mobile,userAgent:mobile?'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1':undefined,acceptDownloads:true});
   const page=await context.newPage(),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
   page.on('console',message=>{
@@ -96,13 +100,19 @@ try{
   await page.locator('#classicMode').click();
   await page.locator('#startButton').click();
   await page.waitForFunction(()=>document.querySelector('#bgm')?.currentTime>.3,{timeout:18000});
+  await page.locator('#audioButton').click(); // isolate original BGM in first two takes
   for(let take=1;take<=2;take++){
+   await page.evaluate(()=>{const g=window.JIJI_FIGHTER;g.debugSetTravel(0);g.debugClearEnemies();g.debugNoSpawns();g.debugSetDamageCooldown(1000);});
    await page.locator('#recordToggle').click();
    await page.waitForFunction(()=>window.JIJI_MEDIA?.recording,{timeout:9000});
    await page.waitForTimeout(2100);
    await auditFile(page,(mobile?'mobile':'desktop')+'-take-'+take,true);
    await page.waitForFunction(()=>!window.JIJI_MEDIA?.recording,{timeout:9000});
+   const mode=await page.evaluate(()=>window.JIJI_FIGHTER.state.mode);
+   if(mode==='paused')await page.locator('#resumeButton').click();
+   else if(mode!=='playing')throw Error('Unexpected game state after take: '+mode);
   }
+  await page.locator('#audioButton').click(); // restore laser/blast sound for GAME OVER
   await page.locator('#recordToggle').click();
   await page.waitForFunction(()=>window.JIJI_MEDIA?.recording);
   await page.waitForTimeout(900);
@@ -123,8 +133,9 @@ try{
   console.log((mobile?'Mobile':'Desktop')+' passed two take recordings and automatic death save');
   await context.close();
  }
- console.log('TOTAL AUDIBLE SAVED VIDEO FILES: '+saved);
+ console.log('TOTAL AUDIBLE SAVED VIDEO FILES: '+saved+'; files: '+tmp);
 }finally{
  await browser.close();
+ localServer?.kill('SIGINT');
  await new Promise(done=>server.close(done));
 }

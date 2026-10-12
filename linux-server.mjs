@@ -1,5 +1,5 @@
 import http from 'node:http';
-import {readFile,stat} from 'node:fs/promises';
+import {readFile,stat,readdir} from 'node:fs/promises';
 import {createReadStream} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
@@ -18,14 +18,24 @@ const assets=new Map([
   ['/', ['index.html','text/html; charset=utf-8']],
   ['/index.html', ['index.html','text/html; charset=utf-8']],
   ['/music/mazz-db-2017.mp3',['music/mazz-db-2017.mp3','audio/mpeg']],
-  ['/mp4-share.js',['mp4-share.js','text/javascript; charset=utf-8']],
-  ['/linux-music-recovery.js',['linux-music-recovery.js','text/javascript; charset=utf-8']]
+
 ]);
+// Serve only the executable filenames produced by this build.
+for(const name of await readdir(new URL('dist/',root))){
+  if(/^(mp4-share|linux-music-recovery)\.[a-f0-9]+\.js$/.test(name))assets.set('/'+name,[name,'text/javascript; charset=utf-8']);
+}
+for(const name of await readdir(new URL('dist/encoder/',root))){
+  assets.set('/encoder/'+name,['encoder/'+name,name.endsWith('.js')?'text/javascript':name.endsWith('.json')?'application/json':'application/octet-stream']);
+}
 let cached=null,expires=0;
 const server=http.createServer(async(req,res)=>{
   res.setHeader('X-Content-Type-Options','nosniff');
   const origin='http://127.0.0.1:'+server.address().port;
   if(req.headers.host!==new URL(origin).host){res.writeHead(403);res.end('Forbidden');return;}
+  if(req.url==='/api/recording-capabilities'&&req.method==='GET'){
+    res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
+    res.end(JSON.stringify({backend:'local-ffmpeg'}));return;
+  }
   // Local FFmpeg endpoint is available only from this 127.0.0.1 server.
   // Keep Cloudflare Pages / phone recording code completely unchanged.
   if(req.url?.split('?')[0]==='/api/export-mp4'){
@@ -48,9 +58,8 @@ const server=http.createServer(async(req,res)=>{
     }
     const asset=assets.get(url.pathname);
     if(!asset){res.writeHead(404);res.end('Not found');return;}
-    // Chromium requests byte ranges for MP3. Returning a full 200 response to a
-    // Range request can cause MEDIA_ERR_SRC_NOT_SUPPORTED ("MUSIC ERROR").
-    // Stream correct 206 Partial Content responses from disk instead.
+    // Honor Chromium byte-range requests for MP3 seeking/streaming. A 200
+    // response alone does not prove the cause of a client decoding error.
     const localFile=new URL('dist/'+asset[0],root);
     if(url.pathname==='/music/mazz-db-2017.mp3'){
       const size=(await stat(localFile)).size;
@@ -80,6 +89,7 @@ const server=http.createServer(async(req,res)=>{
       return;
     }
     const body=await readFile(localFile);
+    res.setHeader('Cache-Control','no-store');
     if(url.pathname==='/sw.js')res.setHeader('Cache-Control','no-cache');
     res.writeHead(200,{'Content-Type':asset[1],'Content-Length':body.length});
     res.end(req.method==='HEAD'?undefined:body);
