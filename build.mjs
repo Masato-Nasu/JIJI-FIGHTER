@@ -377,7 +377,7 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
 }
 
 
-// MP4 / X sharing bridge, loaded before game scripts to capture recorder downloads.
+// MP4 conversion bridge, loaded before game scripts to capture recorder downloads.
 {
  const fs=await import('node:fs/promises');
  await fs.copyFile(new URL('./mp4-share.js',import.meta.url),new URL('./dist/mp4-share.js',import.meta.url));
@@ -390,5 +390,5 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
    else throw new Error('Cannot find MP4 script injection location');
    await fs.writeFile(htmlPath,html,'utf8');
  }
- console.log('MP4 recording conversion and X sharing bridge included.');
+ console.log('MP4 recording conversion bridge included.');
 }
