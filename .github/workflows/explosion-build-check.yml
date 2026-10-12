@@ -6,6 +6,7 @@ on:
       - scripts/test-music.mjs
       - scripts/test-recorded-audio.mjs
       - scripts/test-sfx-recording.mjs
+      - scripts/test-lethal-projectiles.mjs
       - sw.js
       - .github/workflows/explosion-build-check.yml
   workflow_dispatch:
@@ -43,6 +44,8 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Play BGM in desktop and mobile browsers
         run: node scripts/test-music.mjs
+      - name: Verify lethal enemy shots trigger visible explosion on phones and PCs
+        run: node scripts/test-lethal-projectiles.mjs
       - name: Install audio analyzer
         run: |
           sudo apt-get update -qq
