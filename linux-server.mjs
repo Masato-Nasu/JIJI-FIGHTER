@@ -47,7 +47,7 @@ const server=http.createServer(async(req,res)=>{
 });
 server.listen(0,'127.0.0.1',()=>{
   const url='http://127.0.0.1:'+server.address().port;
-  console.log('JIJI FIGHTER v0.11.3\n'+url+'\n話題語の取得には初回30秒ほどかかる場合があります。\nこのターミナルは開いたままにしてください。終了: Ctrl+C');
+  console.log('JIJI FIGHTER v0.11.6\n'+url+'\n話題語の取得には初回30秒ほどかかる場合があります。\nこのターミナルは開いたままにしてください。終了: Ctrl+C');
   if(process.env.JIJI_NO_OPEN!=='1'){
     const child=spawn('xdg-open',[url],{stdio:'ignore'});
     child.on('error',()=>console.log('上記URLをブラウザで開いてください。'));
