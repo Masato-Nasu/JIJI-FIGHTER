@@ -64,16 +64,18 @@ async function record(page,label,bgmOn){
 try{
  for(const mobile of [false,true]){
   const ctx=await browser.newContext({viewport:mobile?{width:390,height:844}:{width:1280,height:780},isMobile:mobile,hasTouch:mobile,acceptDownloads:true});
-  const page=await ctx.newPage(),errors=[];
-  page.on('pageerror',err=>errors.push(err.message));
-  await page.goto(base+'/',{waitUntil:'domcontentloaded'});
-  await page.locator('#classicMode').click();
-  await page.locator('#startButton').click();
-  await page.waitForFunction(()=>document.querySelector('#bgm')?.currentTime>.25,{timeout:17000});
-  if((await page.locator('#audioButton').textContent()).trim()!=='SFX ON')throw Error('SFX not on by default');
-  await record(page,(mobile?'mobile':'desktop')+'-sfx-only',false);
-  await record(page,(mobile?'mobile':'desktop')+'-bgm-plus-sfx',true);
-  if(errors.length)throw Error('Browser errors '+errors.slice(0,3).join(';'));
+  for(const [suffix,bgmOn] of [['sfx-only',false],['bgm-plus-sfx',true]]){
+    const page=await ctx.newPage(),errors=[];
+    page.on('pageerror',err=>errors.push(err.message));
+    await page.goto(base+'/',{waitUntil:'domcontentloaded'});
+    await page.locator('#classicMode').click();
+    await page.locator('#startButton').click();
+    await page.waitForFunction(()=>document.querySelector('#bgm')?.currentTime>.25,{timeout:17000});
+    if((await page.locator('#audioButton').textContent()).trim()!=='SFX ON')throw Error('SFX not on by default');
+    await record(page,(mobile?'mobile':'desktop')+'-'+suffix,bgmOn);
+    if(errors.length)throw Error('Browser errors '+errors.slice(0,3).join(';'));
+    await page.close();
+  }
   console.log((mobile?'Mobile':'Desktop')+' saved BGM+SFX and SFX-only recordings validated');
   await ctx.close();
  }
