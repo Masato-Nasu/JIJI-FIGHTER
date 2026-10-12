@@ -366,7 +366,7 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
   const path = new URL('./dist/index.html', import.meta.url);
   const html = await fs.readFile(path, 'utf8');
   const oldLabel = '<span class="index">V. 0.9.12</span>';
-  const newLabel = '<span class="index">V. 0.11.12</span>';
+  const newLabel = '<span class="index">V. 0.11.13</span>';
   if (!html.includes(oldLabel) && !html.includes(newLabel)) {
     throw new Error('Version label mismatch: refusing silent publication');
   }
