@@ -471,3 +471,37 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
  await fs.writeFile(file,h,'utf8');
  console.log('Course menu scroll and stage selection clarified; native H.264/AAC recording prioritized.');
 }
+
+
+// JIJI_TREND_DENSITY_20261012
+// Keep the six stage layouts, stage enemy HP, ranking, bosses and CLASSIC intact.
+// Later TREND stages used to spawn up to 3 large glyphs per burst.
+// Cap simultaneously live word enemies and introduce one at a time.
+{
+ const fs=await import('node:fs/promises');
+ const path=new URL('./dist/index.html',import.meta.url);
+ let game=await fs.readFile(path,'utf8');
+ function one(before,after,reason){
+   const n=game.split(before).length-1;
+   if(n!==1)throw Error('TREND density patch mismatch '+reason+': '+n);
+   game=game.replace(before,after);
+ }
+ one("const introWords=Math.min(6,trendItems.length);",
+     "const introWords=Math.min(3,trendItems.length);",
+     'initial words 6 to 3');
+ one("enemies.length<(gameMode==='trend'?currentStage().enemyCap:14+wave*2)",
+     "enemies.length<(gameMode==='trend'?Math.min(currentStage().enemyCap,Math.ceil((wave+7)/2)):14+wave*2)",
+     'TREND visible cap 4,5,5,6,6,7');
+ one(
+   "if(gameMode==='trend'&&wave>=2){\n        const reinforcements=wave>=5?2:wave>=4?1:Math.random()<.45?1:0;\n        for(let n=0;n<reinforcements&&enemies.length<currentStage().enemyCap;n++)\n          spawnTrend(rand(159,220));\n      }",
+   "// TREND: one word at a time; avoid unreadable multi-word bursts.",
+   'remove burst reinforcements');
+ one("spawnTimer=rand(base*.78,base*1.02)*(gameMode==='trend'?.65:.73);",
+     "spawnTimer=rand(base*.78,base*1.02)*(gameMode==='trend'?1.8:.73);",
+     'space out new TREND words');
+ one("shots=[];bombs=[];spawnTimer=.2;groundTimer=.55;",
+     "shots=[];bombs=[];spawnTimer=gameMode==='trend'?1.35:.2;groundTimer=.55;",
+     'brief pause after a stage transition');
+ await fs.writeFile(path,game,'utf8');
+ console.log('TREND glyph density reduced: 3 opening words, max 4–7 live words by stage, no burst spawns; CLASSIC unchanged.');
+}
