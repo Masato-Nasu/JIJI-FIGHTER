@@ -64,12 +64,17 @@ try{
     });
     if((await page.evaluate(()=>window.JIJI_FIGHTER.state.mode))!=='destroying')
       throw Error('Expected wall collision to trigger destruction');
-    if(!await page.locator('#bgm').evaluate(a=>a.paused))
-      throw Error('BGM continued after a fatal wall collision');
+    if(await page.locator('#bgm').evaluate(a=>a.paused))
+      throw Error('BGM should CONTINUE during the fatal explosion');
     await page.evaluate(()=>window.JIJI_FIGHTER.debugStep(3));
     if((await page.evaluate(()=>window.JIJI_FIGHTER.state.mode))!=='over')
       throw Error('Expected GAME OVER after explosion');
-    console.log((mobile?'Mobile':'Desktop')+' STOP, SFX defaults, collision BGM stop OK');
+    if(await page.locator('#bgm').evaluate(a=>a.paused))
+      throw Error('BGM must not stop immediately when the explosion ends');
+    await page.waitForTimeout(1750);
+    if(!await page.locator('#bgm').evaluate(a=>a.paused))
+      throw Error('BGM did not fade and stop after the post-explosion tail');
+    console.log((mobile?'Mobile':'Desktop')+' STOP, SFX defaults, post-explosion music fade OK');
     if(errors.length)throw Error('Script errors: '+errors.slice(0,3).join('; '));
     console.log((mobile?'Mobile':'Desktop')+' BGM OK',JSON.stringify(result));
     await context.close();
