@@ -1,5 +1,6 @@
 import http from 'node:http';
-import {readFile} from 'node:fs/promises';
+import {readFile,stat} from 'node:fs/promises';
+import {createReadStream} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {spawn} from 'node:child_process';
 import {mkdtempSync} from 'node:fs';
@@ -46,7 +47,38 @@ const server=http.createServer(async(req,res)=>{
     }
     const asset=assets.get(url.pathname);
     if(!asset){res.writeHead(404);res.end('Not found');return;}
-    const body=await readFile(new URL('dist/'+asset[0],root));
+    // Chromium requests byte ranges for MP3. Returning a full 200 response to a
+    // Range request can cause MEDIA_ERR_SRC_NOT_SUPPORTED ("MUSIC ERROR").
+    // Stream correct 206 Partial Content responses from disk instead.
+    const localFile=new URL('dist/'+asset[0],root);
+    if(url.pathname==='/music/mazz-db-2017.mp3'){
+      const size=(await stat(localFile)).size;
+      const headers={'Content-Type':'audio/mpeg','Accept-Ranges':'bytes','Cache-Control':'public, max-age=3600'};
+      const range=req.headers.range;
+      if(range){
+        const m=/^bytes=(\d*)-(\d*)$/.exec(range);
+        if(!m||(!m[1]&&!m[2])){
+          res.writeHead(416,{...headers,'Content-Range':'bytes */'+size});
+          res.end();return;
+        }
+        const start=m[1]?Number(m[1]):Math.max(0,size-Number(m[2]));
+        const end=m[1]?(m[2]?Math.min(size-1,Number(m[2])):size-1):size-1;
+        if(start>=size||start>end||!Number.isSafeInteger(start)||!Number.isSafeInteger(end)){
+          res.writeHead(416,{...headers,'Content-Range':'bytes */'+size});
+          res.end();return;
+        }
+        res.writeHead(206,{...headers,'Content-Range':`bytes ${start}-${end}/${size}`,
+          'Content-Length':String(end-start+1)});
+        if(req.method==='HEAD'){res.end();return;}
+        createReadStream(localFile,{start,end}).on('error',e=>res.destroy(e)).pipe(res);
+        return;
+      }
+      res.writeHead(200,{...headers,'Content-Length':size});
+      if(req.method==='HEAD'){res.end();return;}
+      createReadStream(localFile).on('error',e=>res.destroy(e)).pipe(res);
+      return;
+    }
+    const body=await readFile(localFile);
     if(url.pathname==='/sw.js')res.setHeader('Cache-Control','no-cache');
     res.writeHead(200,{'Content-Type':asset[1],'Content-Length':body.length});
     res.end(req.method==='HEAD'?undefined:body);
