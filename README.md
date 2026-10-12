@@ -2,7 +2,7 @@
 
 Japanese current topics become three-dimensional wireframe enemies. Fly between two mirrored worlds, fire lasers and bombs, and break through six monochrome stages.
 
-**v0.11.5 · Installable PWA · PC / mobile · Japanese topics worldwide**
+**v0.11.6 · Installable PWA · PC / mobile · Japanese topics worldwide**
 
 **[PLAY JIJI FIGHTER / ゲームを起動](https://jiji-fighter.pages.dev/)** · [Source code](https://github.com/Masato-Nasu/JIJI-FIGHTER) · [LIVE WORDS API](https://jiji-fighter.pages.dev/api/trends)
 
@@ -29,7 +29,7 @@ Japanese current topics become three-dimensional wireframe enemies. Fly between 
 - Live topics from Google Trends Japan, public Bluesky and Japanese news RSS.
 - A mirrored underside reached by an automatic aircraft roll.
 - Simultaneous lasers and bombs, three hull difficulty settings, stage practice.
-- Aircraft explosion on wall collision or hull depletion.
+- Aircraft explosion on wall collision **or any lethal enemy hit, including multiple bullets in one frame**. HULL 0% triggers the full explosion before GAME OVER.
 - Original looping BGM **MAZZ DB 2017**, composed by Masato Nasu. MUSIC starts when START is tapped; SFX controls effects only.
 - PWA manifest, home-screen icons and offline CLASSIC mode after initial caching.
 
@@ -67,6 +67,8 @@ The play URL above is the configured Cloudflare Pages address. Availability must
 ## BGM / 音楽
 
 The original MP3 plays locally when **START MISSION** is tapped, and loops throughout gameplay at a reduced 28% volume. **MUSIC ON / OFF** controls background music. Sound effects start **ON** at reduced volume; the **SFX ON / OFF** button controls effects only. **STOP GAME** (next to PAUSE) exits the mission and returns to the title. On a fatal hit, music continues through the 2.4-second explosion, plays for 0.8 seconds more and fades over 0.65 seconds; the recording is saved after the fade. Manual STOP GAME remains immediate. If a phone blocks playback, tap **TAP MUSIC** once to retry. Recording mode now mixes **BGM and laser/explosion SFX** into one saved video's audio track, including subsequent takes. Both desktop and mobile browsers are covered by automated saved-video audio tests. Desktop/mobile browser tests decode six saved recordings and verify non-silent audio; real phone gallery playback depends on the file's codec support.
+
+スマホで敵の弾が当たって耐久力が0％になっても、機体が爆発してからGAME OVERになります。複数の弾が同じ瞬間に当たっても爆発を省略しません。
 
 スマホでは **START MISSION** を押すとBGMが始まり、控えめな音量でループ再生されます。**SFXは初期ON**で、音量を下げています。**STOP GAME** を押すと開始画面に戻り、音楽も停止します。撃墜時は爆発中もBGMが続き、爆発後に約0.8秒の余韻を置いて約0.65秒でフェードアウトします。その後、録画を自動保存します。**録画動画にはBGMだけでなくレーザーや爆発などのSFXも収録します。**音が止まっている場合は **TAP MUSIC** を押してください。SFXは効果音だけの切り替えです。スマホの標準ギャラリーでWebM（Opus音声）の再生に対応していない場合は、ブラウザや対応する動画プレーヤーで開いてください。更新が見えない場合は、インストール済みアプリを一度完全に閉じて再度開いてください。
 
