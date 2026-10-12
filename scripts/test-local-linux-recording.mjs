@@ -62,6 +62,23 @@ try{
    muted:document.querySelector('#bgm')?.muted,paused:document.querySelector('#bgm')?.paused}));
   if(result.paused||result.muted||result.label?.includes('ERROR'))throw Error('Music broken: '+JSON.stringify(result));
   console.log('REAL LOCAL LINUX BGM OK, audio/MPEG HTTP 206, native Chrome playback');
+  // Force a genuine media load failure. Recovery must fetch the original
+  // unmodified MP3 as a Blob and resume with the SAME audio element, preserving
+  // the game's MediaStream audio recording graph.
+  await page.evaluate(()=>{
+   const audio=document.querySelector('#bgm');
+   audio.src='/__missing-music__.mp3';
+   audio.load();
+  });
+  await page.waitForFunction(()=>window.JIJI_MUSIC_DIAGNOSTIC?.attempted,{timeout:12000});
+  await page.waitForFunction(()=>{
+   const audio=document.querySelector('#bgm');
+   return window.JIJI_MUSIC_DIAGNOSTIC?.recovered&&!audio.paused&&audio.currentTime>.25;
+  },null,{timeout:30000});
+  const recovered=await page.evaluate(()=>window.JIJI_MUSIC_DIAGNOSTIC);
+  if(recovered.downloadStatus!==200||recovered.bytes<100000||
+    !recovered.recovered)throw Error('BGM Blob fallback invalid: '+JSON.stringify(recovered));
+  console.log('REAL LOCAL LINUX MUSIC ERROR RECOVERY OK',JSON.stringify(recovered));
   await page.close();
  }finally{await browser.close();}
  const response=await fetch(address+'/api/export-mp4');
