@@ -366,14 +366,14 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
   const path = new URL('./dist/index.html', import.meta.url);
   const html = await fs.readFile(path, 'utf8');
   const oldLabel = '<span class="index">V. 0.9.12</span>';
-  const newLabel = '<span class="index">V. 0.11.13</span>';
+  const newLabel = '<span class="index">V. 0.11.14</span>';
   if (!html.includes(oldLabel) && !html.includes(newLabel)) {
     throw new Error('Version label mismatch: refusing silent publication');
   }
   if (html.includes(oldLabel)) {
     await fs.writeFile(path, html.replace(oldLabel, newLabel), 'utf8');
   }
-  console.log('Built JIJI FIGHTER with display version V. 0.11.12');
+  console.log('Built JIJI FIGHTER with display version V. 0.11.14');
 }
 
 
@@ -467,7 +467,7 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
  replaceOne(oldStage,'','remove old stage layout');
  // Place the course choice before the two sets of recording/difficulty controls.
  const stateLine='<p id="loadState" class="load-state" role="status">文字の立体データを準備しています…</p>';
- replaceOne(stateLine,stateLine+'\\n'+newStage,'stage selector location');
+ replaceOne(stateLine,stateLine+'\n'+newStage,'stage selector location');
  await fs.writeFile(file,h,'utf8');
  console.log('Course menu scroll and stage selection clarified; native H.264/AAC recording prioritized.');
 }
