@@ -47,7 +47,10 @@ async function auditFile(page,label,stop){
    throw Error('Video export download missing; MP4 status='+String(status)+'; '+e.message);
  });
  const path=join(tmp,label+(dl.suggestedFilename().endsWith('.mp4')?'.mp4':'.webm'));
- await dl.saveAs(path);
+ try{await dl.saveAs(path);}catch(e){
+  const status=await page.locator('#jiji-mp4-status').textContent().catch(()=>null);
+  throw Error('Recorded download canceled: suggested='+dl.suggestedFilename()+' status='+status+' error='+e.message);
+ }
  const info=JSON.parse(execFileSync('ffprobe',['-v','error','-show_streams','-of','json',path],{encoding:'utf8'}));
  const streams=info.streams.map(x=>({type:x.codec_type,codec:x.codec_name}));
  if(!streams.some(x=>x.type==='audio')||!streams.some(x=>x.type==='video'))
@@ -80,6 +83,10 @@ try{
    isMobile:mobile,hasTouch:mobile,acceptDownloads:true});
   const page=await context.newPage(),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
+  page.on('console',message=>{
+    if(message.type()==='error'||message.text().includes('JIJI MP4'))
+      console.log((mobile?'MOBILE':'DESKTOP')+' BROWSER: '+message.type()+' '+message.text());
+  });
   page.on('dialog',d=>{errors.push('Unexpected alert '+d.message());d.accept();});
   await page.goto(base+'/',{waitUntil:'domcontentloaded'});
   await page.locator('#classicMode').click();
