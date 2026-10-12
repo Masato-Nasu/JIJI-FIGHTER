@@ -393,6 +393,22 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
  console.log('MP4 recording conversion bridge included.');
 }
 
+// Linux Chrome-only fallback for actual BGM media decoding/streaming errors.
+// Leave existing mobile music playback and capture logic entirely unchanged.
+{
+ const fs=await import('node:fs/promises');
+ await fs.copyFile(new URL('./linux-music-recovery.js',import.meta.url),new URL('./dist/linux-music-recovery.js',import.meta.url));
+ const htmlPath=new URL('./dist/index.html',import.meta.url);
+ let html=await fs.readFile(htmlPath,'utf8');
+ if(!html.includes('src="./linux-music-recovery.js"')){
+  const script='<script src="./linux-music-recovery.js"></script>';
+  if(!html.includes('</head>'))throw Error('Music recovery injection requires HTML head');
+  html=html.replace('</head>',script+'\n</head>');
+  await fs.writeFile(htmlPath,html,'utf8');
+ }
+ console.log('Linux Chrome music error recovery and diagnostics installed.');
+}
+
 
 // TREND_FETCH_UNBLOCK_20261012
 // The original client delayed its API request until an ~8 MB embedded font was ready.
