@@ -1,0 +1,36 @@
+name: Validate explosion fix build
+on:
+  push:
+    paths:
+      - build.mjs
+      - sw.js
+      - .github/workflows/explosion-build-check.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build with restored crash animation
+        run: node build.mjs
+      - name: Validate patched game and PWA
+        run: |
+          node --input-type=module -e "
+          import {readFile} from 'node:fs/promises';
+          const html=await readFile('dist/index.html','utf8');
+          const must=['const DESTRUCTION_SECONDS=2.4;',
+            'WALL COLLISION', 'AIRCRAFT DESTROYED',
+            'for(let i=0;i<90;i++){',
+            \"wallWarning.classList.remove('visible')\",
+            'function drawDestruction()'];
+          for(const x of must)if(!html.includes(x))throw Error('Missing: '+x);
+          console.log('Explosion animation, collision text and warning reset present.');
+          "
+          test -s dist/music/mazz-db-2017.mp3
+          test -s dist/manifest.webmanifest
