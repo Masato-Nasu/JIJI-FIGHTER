@@ -264,7 +264,8 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
  sub("    audio.muted=false;audio.volume=.28;audio.loop=true;",
      "    cancelEnding();audio.muted=false;audio.volume=.28;audio.loop=true;",
      'cancel delayed fades when restarting music');
- sub("if(musicOn && stream.getAudioTracks().length!==1){",
+ if(h.includes("if(musicOn && stream.getAudioTracks().length!==1){"))sub(
+     "if(musicOn && stream.getAudioTracks().length!==1){",
      "if(musicOn && (stream.getAudioTracks().length!==1||stream.getAudioTracks()[0].readyState!=='live')){",
      'never silently record with a stopped audio track');
  await fs.writeFile(file,h,'utf8');
