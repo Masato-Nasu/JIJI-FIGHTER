@@ -1,7 +1,7 @@
 /* MP4 export bridge for JIJI FIGHTER — converts recorded WebM to H.264/AAC MP4 */
 (()=>{
 'use strict';
-if(window.__jijiMp4Bridge)return;window.__jijiMp4Bridge=true;console.info('JIJI MP4 H264 AAC verified bridge loaded');
+if(window.__jijiMp4Bridge)return;window.__jijiMp4Bridge=true;console.info('JIJI desktop MP4: verify real ISO BMFF codec entries before saving');
 // Prefer native H.264/AAC MP4 capture where the browser actually supports it.
 // Preserve the constructor API and avoid FFmpeg initialization on those browsers.
 const NativeRecorder=window.MediaRecorder;
@@ -22,11 +22,15 @@ if(chosenType){
 }
 const originalClick=HTMLAnchorElement.prototype.click,createURL=URL.createObjectURL.bind(URL);
 let active=false,mp4File=null,dialog=null,ffmpeg=null,sourceURL=null;
+// Normal phone recording/sharing is known to work. Limit extra click interception to desktop.
+const desktop=!/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+const approvedDownloads=new WeakSet();
+
 function ui(message){if(!dialog){dialog=document.createElement('section');dialog.id='jiji-mp4-share';dialog.style.cssText='position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:2147483647;background:#090909;color:white;border:1px solid #aaa;padding:12px;min-width:270px;max-width:calc(100vw - 32px);font:13px system-ui;text-align:center';dialog.innerHTML='<p id="jiji-mp4-status"></p><button id="jiji-mp4-close">閉じる</button>';document.body.append(dialog);dialog.querySelector('#jiji-mp4-close').onclick=()=>{dialog.remove();dialog=null;};}dialog.querySelector('#jiji-mp4-status').textContent=message;}
-function save(file){const link=document.createElement('a');link.download=file.name;link.href=createURL(file);originalClick.call(link);setTimeout(()=>URL.revokeObjectURL(link.href),60000);}
+function save(file){const link=document.createElement('a');link.download=file.name;link.href=createURL(file);approvedDownloads.add(link);originalClick.call(link);setTimeout(()=>URL.revokeObjectURL(link.href),60000);}
 function problem(e){return e instanceof Error?e.message:(e?.message||e?.type||e?.name||String(e||'不明なエラー'));}
 function deadline(promise,ms,label){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(label+'が'+Math.ceil(ms/1000)+'秒以内に完了しませんでした。通信・ブラウザ制限を確認してください')),ms);})]).finally(()=>clearTimeout(timer));}
-async function blobUrl(url,type,label){ui('MP4エンジン: '+label+' を取得中…');const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),20000);try{const response=await fetch(url,{signal:controller.signal,cache:'force-cache'});if(!response.ok)throw Error(label+' HTTP '+response.status);return createURL(new Blob([await response.arrayBuffer()],{type}));}catch(e){throw Error(label+' の取得に失敗: '+problem(e));}finally{clearTimeout(timer);}}
+async function blobUrl(url,type,label){ui('MP4エンジン: '+label+' を取得中…');const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);try{const response=await fetch(url,{signal:controller.signal,cache:'force-cache'});if(!response.ok)throw Error(label+' HTTP '+response.status);return createURL(new Blob([await response.arrayBuffer()],{type}));}catch(e){throw Error(label+' の取得に失敗: '+problem(e));}finally{clearTimeout(timer);}}
 async function engine(){
  if(ffmpeg)return ffmpeg;
  const root='https://cdn.jsdelivr.net/npm/';
@@ -41,27 +45,42 @@ async function engine(){
  const f=new window.FFmpegWASM.FFmpeg();
  f.on('log',({message})=>console.debug('[MP4]',message));
  ui('MP4エンジン: Worker・WASMを初期化中…');
- await deadline(f.load({classWorkerURL:worker,coreURL,wasmURL}),30000,'Worker・WASM初期化');
+ await deadline(f.load({classWorkerURL:worker,coreURL,wasmURL}),90000,'Worker・WASM初期化');
  ffmpeg=f;return f;
 }
 
 async function codecInfo(blob){
- // A .mp4 suffix and MediaRecorder.isTypeSupported do not guarantee AAC.
- // Inspect the actual ISO BMFF sample-entry tags before accepting a native file.
- const first=new Uint8Array(await blob.slice(0,Math.min(blob.size,4*1024*1024)).arrayBuffer());
- const mp4=first.length>=8&&String.fromCharCode(...first.subarray(4,8))==='ftyp';
- if(!mp4)return {mp4:false,h264:false,aac:false,opus:false};
- const decoder=new TextDecoder('latin1');
- let text=decoder.decode(first);
- if(blob.size>first.byteLength){
-   text+=decoder.decode(await blob.slice(Math.max(first.byteLength,blob.size-4*1024*1024)).arrayBuffer());
+ // Examine actual MP4 sample-description entries (stsd). Searching for
+ // 'mp4a' as plain text may mistake metadata for an AAC sound track.
+ const head=await blob.slice(0,Math.min(blob.size,5*1024*1024)).arrayBuffer();
+ const header=new Uint8Array(head);
+ const mp4=header.length>=12&&String.fromCharCode(...header.subarray(4,8))==='ftyp';
+ if(!mp4)return {mp4:false,h264:false,aac:false,opus:false,tracks:[]};
+ const chunks=[header];
+ if(blob.size>header.byteLength){
+   const tailStart=Math.max(header.byteLength,blob.size-5*1024*1024);
+   chunks.push(new Uint8Array(await blob.slice(tailStart).arrayBuffer()));
  }
- return {
-   mp4:true,
-   h264:/(?:avc1|avc3)/.test(text),
-   aac:text.includes('mp4a'),
-   opus:/(?:Opus|opus)/.test(text)
- };
+ const tracks=[];
+ for(const bytes of chunks){
+   const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+   for(let i=4;i+20<=bytes.length;i++){
+     if(bytes[i]!==115||bytes[i+1]!==116||bytes[i+2]!==115||bytes[i+3]!==100)continue;
+     const boxSize=view.getUint32(i-4);
+     if(boxSize<24||i-4+boxSize>bytes.length)continue;
+     const count=view.getUint32(i+8);
+     if(count<1||count>50)continue;
+     let entry=i+12;
+     for(let k=0;k<count&&entry+8<=Math.min(bytes.length,i-4+boxSize);k++){
+       const size=view.getUint32(entry);
+       if(size<8||entry+size>i-4+boxSize)break;
+       tracks.push(String.fromCharCode(...bytes.subarray(entry+4,entry+8)));
+       entry+=size;
+     }
+   }
+ }
+ return {mp4:true,h264:tracks.includes('avc1')||tracks.includes('avc3'),
+   aac:tracks.includes('mp4a'),opus:tracks.includes('Opus')||tracks.includes('opus'),tracks};
 }
 function compatible(x){return x.mp4&&x.h264&&x.aac&&!x.opus;}
 function filename(){return 'JIJI-FIGHTER-'+new Date().toISOString().replace(/[:.]/g,'-')+'.mp4';}
@@ -94,7 +113,7 @@ async function convert(url,downloadName){
      '-c:v',inputCodec.h264?'copy':'libx264'];
    if(!inputCodec.h264)args.push('-preset','ultrafast','-pix_fmt','yuv420p');
    args.push('-c:a','aac','-b:a','128k','-ar','44100','-movflags','+faststart','output.mp4');
-   const code=await deadline(ff.exec(args),180000,'H.264/AAC変換');
+   const code=await deadline(ff.exec(args),300000,'H.264/AAC変換');
    if(code!==0)throw Error('変換エンジン終了コード '+code+'。動画・音声が正常に記録されたか確認してください');
    const result=await ff.readFile('output.mp4');
    if(result.byteLength<1024)throw Error('変換後の動画が空です');
@@ -126,10 +145,23 @@ async function convert(url,downloadName){
 HTMLAnchorElement.prototype.click=function(){
  const name=this.download||'';
  // Intercept BOTH mp4 and webm. Native mp4 can contain unsupported Opus audio.
- if(this.href.startsWith('blob:')&&/\.(?:webm|mp4)$/i.test(name)){
+ if(!approvedDownloads.has(this)&&this.href.startsWith('blob:')&&/\.(?:webm|mp4)$/i.test(name)){
    void convert(this.href,name);
    return;
  }
  return originalClick.call(this);
 };
+// Some PC recording paths use a real <a download> click rather than .click().
+// Capture them before they can save an unchecked WebM/MP4 to disk.
+// Leave touch/mobile download behavior unchanged.
+if(desktop)document.addEventListener('click',event=>{
+ const a=event.target?.closest?.('a[download]');
+ if(!a||approvedDownloads.has(a))return;
+ const name=a.download||'';
+ if(a.href.startsWith('blob:')&&/\.(?:webm|mp4)$/i.test(name)){
+   event.preventDefault();
+   event.stopImmediatePropagation();
+   void convert(a.href,name);
+ }
+},true);
 })();
