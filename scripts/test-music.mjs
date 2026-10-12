@@ -44,6 +44,32 @@ try{
     if(!await page.locator('#bgm').evaluate(a=>a.paused))throw Error('Pause failed');
     await page.locator('#musicToggle').click();
     await page.waitForFunction(()=>!document.querySelector('#bgm').paused);
+    // Verify the gameplay STOP control, softer default sound levels and death.
+    if((await page.locator('#audioButton').textContent()).trim()!=='SFX ON')throw Error('SFX must be ON initially');
+    if(Math.abs(await page.locator('#bgm').evaluate(a=>a.volume)-.28)>.001)throw Error('BGM volume was not reduced');
+    if(!await page.locator('#stopGameButton').isVisible())throw Error('STOP GAME button not shown');
+    await page.locator('#stopGameButton').click();
+    await page.waitForFunction(()=>!document.querySelector('#intro').classList.contains('hidden'));
+    if(!await page.locator('#bgm').evaluate(a=>a.paused))throw Error('BGM continued after STOP GAME');
+    if(await page.locator('#stopGameButton').isVisible())throw Error('STOP GAME should hide on title');
+    await page.locator('#startButton').click();
+    await page.waitForFunction(()=>document.querySelector('#bgm').currentTime>.20,{timeout:15000});
+    await page.evaluate(()=>{
+      const game=window.JIJI_FIGHTER;
+      const wall=game.state.wallDistances.find(w=>w.realm==='upper');
+      if(!wall)throw Error('No upper wall found for death test');
+      game.debugSetAltitude(0);
+      game.debugSetTravel(wall.at-4);
+      for(let i=0;i<6 && game.state.mode==='playing';i++)game.debugStep(.04);
+    });
+    if((await page.evaluate(()=>window.JIJI_FIGHTER.state.mode))!=='destroying')
+      throw Error('Expected wall collision to trigger destruction');
+    if(!await page.locator('#bgm').evaluate(a=>a.paused))
+      throw Error('BGM continued after a fatal wall collision');
+    await page.evaluate(()=>window.JIJI_FIGHTER.debugStep(3));
+    if((await page.evaluate(()=>window.JIJI_FIGHTER.state.mode))!=='over')
+      throw Error('Expected GAME OVER after explosion');
+    console.log((mobile?'Mobile':'Desktop')+' STOP, SFX defaults, collision BGM stop OK');
     if(errors.length)throw Error('Script errors: '+errors.slice(0,3).join('; '));
     console.log((mobile?'Mobile':'Desktop')+' BGM OK',JSON.stringify(result));
     await context.close();
