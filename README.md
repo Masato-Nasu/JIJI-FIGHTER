@@ -1,3 +1,83 @@
-# JIJI FIGHTER
+# JIJI FIGHTER / ジジファイター
 
-Publication files are being prepared.
+Japanese current topics become three-dimensional wireframe enemies. Fly between two mirrored worlds, fire lasers and bombs, and break through six monochrome stages.
+
+**v0.11.0 · Installable PWA · PC / mobile · Japanese topics worldwide**
+
+![Japanese live topics — game canvas render](docs/japanese-topics.png)
+
+## Game screens
+
+![Industrial sector](docs/industrial-sector.png)
+
+| Mountain sector | Final fortress |
+| --- | --- |
+| ![Mountain sector](docs/mountain-sector.png) | ![Final fortress](docs/fortress-sector.png) |
+
+![The mirrored underside](docs/mirror-world.png)
+
+## Features
+
+- Six distinct environments, each evolving through three sections.
+- Japanese kanji, hiragana and katakana enemies built from font outlines.
+- Live topics from Google Trends Japan, public Bluesky and Japanese news RSS.
+- A mirrored underside reached by an automatic aircraft roll.
+- Simultaneous lasers and bombs, three hull difficulty settings, stage practice.
+- Aircraft explosion on wall collision or hull depletion.
+- Original music **MAZZ DB 2017**, composed by Masato Nasu.
+- PWA manifest, home-screen icons and offline CLASSIC mode after initial caching.
+
+Ranks are the game's combined order of search terms, social topics and news-derived words, **not a single verified popularity ranking**. Live topic availability depends on the upstream services. TREND requires an internet connection; synthetic sample words are never substituted. Topics remain Japanese regardless of the player's country.
+
+## Play locally on Linux / Linuxで起動
+
+Node.js 22+ is required. No npm dependencies or API keys are needed.
+
+```bash
+git clone https://github.com/Masato-Nasu/JIJI-FIGHTER.git
+cd JIJI-FIGHTER
+bash start-linux.sh
+```
+
+The browser opens automatically. Keep the terminal open; press Ctrl+C to stop. Initial topic loading can take around 30 seconds. Use the server, not `file://`, for TREND mode.
+
+## Publish on Cloudflare Pages / 公開
+
+GitHub hosts the source. **GitHub Pages alone cannot run the bundled topic API.** Deploy the static files and Pages Function together on Cloudflare Pages.
+
+From this repository's root:
+
+```bash
+node build.mjs
+npx wrangler pages deploy dist --project-name jiji-fighter --branch main
+```
+
+Sign in to Cloudflare when prompted. If the project does not exist, create `jiji-fighter` when Wrangler asks. The command prints the actual deployment URL. Keep the `functions/` folder in the repository root when deploying. No API keys, paid X integration, or environment variables are required.
+
+For Git integration: build command `node build.mjs`, output directory `dist`, root directory `/`.
+
+No live deployment URL is claimed here until deployment has succeeded.
+
+## Install / ホーム画面に追加
+
+Open the HTTPS deployment. On supported Chrome/Edge browsers use **INSTALL / アプリを追加** or the browser's install menu. On iPhone use Safari → Share → Add to Home Screen. Browser install options vary.
+
+After the first complete online load and caching, CLASSIC can launch offline. TREND always needs internet. Updates activate after existing game windows are closed, without interrupting a mission. Local Linux ports may change between runs; install the published HTTPS version for a stable app address.
+
+## Controls
+
+| Action | PC | Mobile |
+| --- | --- | --- |
+| Move | WASD / arrow keys | Drag the left side |
+| Laser + bomb | Hold Space or B | Hold ATTACK |
+| Pause | P / Escape | PAUSE |
+
+Cross the mirror plane to enter the other world. Walls destroy the aircraft on every difficulty. Decorative buildings have no collision.
+
+## Credits and rights
+
+Game and original music: **Masato Nasu**. Music: [MAZZ DB 2017](https://soundcloud.com/android-shaman/mazz-db-2017).
+
+The game bundles **opentype.js** (MIT) and **Noto Sans JP** (SIL Open Font License). Existing embedded attribution is retained. No blanket open-source license is granted for the game or music by this repository.
+
+The image above is a render from the game's Canvas code, not a screenshot of the full browser UI.
