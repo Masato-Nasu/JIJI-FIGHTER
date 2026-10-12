@@ -5,6 +5,7 @@ on:
       - build.mjs
       - scripts/test-music.mjs
       - scripts/test-recorded-audio.mjs
+      - scripts/test-sfx-recording.mjs
       - sw.js
       - .github/workflows/explosion-build-check.yml
   workflow_dispatch:
@@ -13,7 +14,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -48,3 +49,5 @@ jobs:
           sudo apt-get install -y -qq ffmpeg
       - name: Decode saved recordings and verify audible BGM
         run: node scripts/test-recorded-audio.mjs
+      - name: Confirm SFX in desktop and mobile saved videos
+        run: node scripts/test-sfx-recording.mjs
