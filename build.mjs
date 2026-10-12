@@ -138,3 +138,71 @@ const oldAudio='id="bgm" preload="auto" loop playsinline src=';
 if(html.includes(oldAudio))html=html.replace(oldAudio,'id="bgm" preload="auto" loop playsinline webkit-playsinline src=');
 await writeFile(outputHtml,html,'utf8');
 console.log('Mobile BGM route repaired; native playback and recording prepared independently.');
+
+
+// STOP_GAME_BGM_SFX_20261012 — applied to the distributable HTML after the existing audio/explosion fixes.
+{
+  const {readFile:readControls,writeFile:writeControls}=await import('node:fs/promises');
+  const output=new URL('./dist/index.html',import.meta.url);
+  let game=await readControls(output,'utf8');
+  function change(before,after,label){
+    const n=game.split(before).length-1;
+    if(n!==1)throw Error('Unsafe STOP/SFX patch '+label+': '+n+' occurrences');
+    game=game.replace(before,after);
+  }
+  change('let held=new Set(),shootHeld=false,bombHeld=false,pointerDrag=null,soundEnabled=false,audioCtx=null;',
+    'let held=new Set(),shootHeld=false,bombHeld=false,pointerDrag=null,soundEnabled=true,audioCtx=null;','SFX initially ON');
+  change('>SFX OFF</button>','>SFX ON</button>','SFX label');
+  change('g.gain.setValueAtTime(volume,t);g.gain.exponentialRampToValueAtTime(.0001,t+duration);',
+    'g.gain.setValueAtTime(volume*.32,t);g.gain.exponentialRampToValueAtTime(.0001,t+duration);','gentle SFX volume');
+  change('audio.volume=.48;','audio.volume=.28;','BGM initial volume');
+  change('audio.muted=false;audio.volume=.55;audio.loop=true;',
+    'audio.muted=false;audio.volume=.28;audio.loop=true;','BGM playback volume');
+  const stopCreate=[
+    "  const stopBtn=document.createElement('button');",
+    "  stopBtn.id='stopGameButton';stopBtn.type='button';stopBtn.className='icon-button stop-game-button';",
+    "  stopBtn.textContent='■ STOP GAME';stopBtn.setAttribute('aria-label','ゲームを終了して開始画面に戻る');",
+    "  stopBtn.style.right='auto';stopBtn.style.display='none';",
+    "  $('game').appendChild(stopBtn);",
+    "  function fitPause(){",
+    "    pauseBtn.style.left=W<=680?'16px':'32px';pauseBtn.style.top=W<=680?'103px':'81px';",
+    "    stopBtn.style.left=W<=680?'109px':'128px';stopBtn.style.top=W<=680?'103px':'81px';",
+    "  }"
+  ].join('\n');
+  change("  function fitPause(){pauseBtn.style.left=W<=680?'16px':'32px';pauseBtn.style.top=W<=680?'103px':'81px';}",
+    stopCreate,'STOP button layout');
+  change("pauseBtn.style.display='block';pauseBtn.textContent='Ⅱ PAUSE';",
+    "pauseBtn.style.display='block';stopBtn.style.display='block';pauseBtn.textContent='Ⅱ PAUSE';",'STOP show on mission');
+  change("els.fire.classList.remove('firing');pauseBtn.style.display='none';\n    els.msg.classList.remove('visible');",
+    "els.fire.classList.remove('firing');pauseBtn.style.display='none';stopBtn.style.display='none';\n    els.msg.classList.remove('visible');",'STOP hide on crash');
+  change("mode='over';shootHeld=false;bombHeld=false;els.fire.classList.remove('firing');pauseBtn.style.display='none';",
+    "mode='over';shootHeld=false;bombHeld=false;els.fire.classList.remove('firing');pauseBtn.style.display='none';stopBtn.style.display='none';",'STOP hide on results');
+  change("sound(65,.85,'sawtooth',.14);sound(145,.3,'square',.08);hud();",
+    "sound(65,.85,'sawtooth',.14);sound(145,.3,'square',.08);hud();\n    window.dispatchEvent(new Event('jiji:musicstop'));",'music off when aircraft explodes');
+  change("els.over.classList.remove('hidden');sound(110,.6,'sawtooth',.08);",
+    "els.over.classList.remove('hidden');sound(110,.6,'sawtooth',.08);\n    window.dispatchEvent(new Event('jiji:musicstop'));",'music off after game complete');
+  change("els.intro.classList.remove('hidden');pauseBtn.style.display='none';$('trendReadout').hidden=true;",
+    "els.intro.classList.remove('hidden');pauseBtn.style.display='none';stopBtn.style.display='none';$('trendReadout').hidden=true;\n    window.dispatchEvent(new Event('jiji:missionstop'));",'STOP returns to menu');
+  change("  pauseBtn.addEventListener('click',()=>{if(mode==='playing')pause();else if(mode==='paused')resume();});",
+    [
+      "  pauseBtn.addEventListener('click',()=>{if(mode==='playing')pause();else if(mode==='paused')resume();});",
+      "  stopBtn.addEventListener('click',()=>{",
+      "    if(mode==='playing'||mode==='paused'||mode==='destroying')$('menuPause').click();",
+      "  });"
+    ].join('\n'),'STOP works during gameplay');
+  change('  // JIJI_AUDIO_STAGE6_2026-10-12-audio6',[
+    "  function stopMusicForMission(){",
+    "    audio.pause();",
+    "    try{audio.currentTime=0;}catch(_){}",
+    "    label();",
+    "  }",
+    "  window.addEventListener('jiji:musicstop',stopMusicForMission);",
+    "  window.addEventListener('jiji:missionstop',()=>{",
+    "    stopMusicForMission();",
+    "    if(recorder?.state==='recording')recorder.stop();",
+    "  });",
+    "  // JIJI_AUDIO_STAGE6_2026-10-12-audio6"
+  ].join('\n'),'media stop and recording auto-save');
+  await writeControls(output,game,'utf8');
+  console.log('STOP button, death music stop, SFX default ON and reduced volume enabled.');
+}
