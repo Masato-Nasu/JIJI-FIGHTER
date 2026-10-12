@@ -77,14 +77,26 @@ The original MP3 plays locally when **START MISSION** is tapped, and loops throu
 
 **Linux Mint + Google Chrome:** PC recordings use the operating system's FFmpeg for reliable H.264 video and AAC audio conversion when the game is started **locally** with `bash start-linux.sh`. The game serves a loopback-only conversion endpoint at `/api/export-mp4`. Recording bytes never leave your PC for conversion, and the existing mobile recording workflow remains unchanged.
 
-Install FFmpeg and run the local version:
+Install FFmpeg and use a **fresh Chrome profile** to avoid the old PWA cache. Your normal Chrome profile and settings are not deleted:
 
 ```bash
-sudo apt install ffmpeg
-git clone --branch fix/desktop-recording-01116 --single-branch https://github.com/Masato-Nasu/JIJI-FIGHTER.git
-cd JIJI-FIGHTER
-bash start-linux.sh
+sudo apt install -y ffmpeg
+cd "$(xdg-user-dir DESKTOP)"
+git clone --branch fix/desktop-recording-01116 --single-branch \
+  https://github.com/Masato-Nasu/JIJI-FIGHTER.git JIJI-FIGHTER-PC-FIX
+cd JIJI-FIGHTER-PC-FIX
+bash start-linux-chrome.sh
 ```
+
+If `JIJI-FIGHTER-PC-FIX` already exists, **do not clone again**. Update and restart the clean launcher instead:
+
+```bash
+cd "$(xdg-user-dir DESKTOP)/JIJI-FIGHTER-PC-FIX"
+git pull --ff-only
+bash start-linux-chrome.sh
+```
+
+Only play in the fresh Chrome window that opens automatically, at `http://127.0.0.1:<port>`. Do not use the published `jiji-fighter.pages.dev` URL to test local FFmpeg export. If the popup says **Worker・WASM**, it is an older version, not this Linux-only converter. Close that older game tab. The fresh Chrome profile is placed under the system temporary directory and does not replace your normal Chrome data.
 
 When a recording completes, the original is retained in memory and available through **「元動画を保存」**. On successful conversion, a H.264/AAC MP4 downloads automatically; **「MP4を保存」** retries the download manually if Chrome blocked it. If conversion fails, the WebM original is saved instead and may be re-saved using the on-screen button. The original phone capture/share path is not intercepted.
 
