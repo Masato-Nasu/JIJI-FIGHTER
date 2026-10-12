@@ -18,7 +18,8 @@ const assets=new Map([
   ['/', ['index.html','text/html; charset=utf-8']],
   ['/index.html', ['index.html','text/html; charset=utf-8']],
   ['/music/mazz-db-2017.mp3',['music/mazz-db-2017.mp3','audio/mpeg']],
-  ['/mp4-share.js',['mp4-share.js','text/javascript; charset=utf-8']]
+  ['/mp4-share.js',['mp4-share.js','text/javascript; charset=utf-8']],
+  ['/linux-music-recovery.js',['linux-music-recovery.js','text/javascript; charset=utf-8']]
 ]);
 let cached=null,expires=0;
 const server=http.createServer(async(req,res)=>{
