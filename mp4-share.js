@@ -62,7 +62,25 @@ async function engine(){
  const f=new window.FFmpegWASM.FFmpeg();
  f.on('log',({message})=>console.debug('[MP4]',message));
  ui('MP4エンジン: Worker・WASMを初期化中…');
- await deadline(f.load({classWorkerURL:worker,coreURL,wasmURL}),90000,'Worker・WASM初期化');
+ // FFmpeg's wrapper can leave load() pending after an uncaught worker error.
+ // Surface worker errors in browser and CI logs rather than only timing out.
+ const RealWorker=window.Worker;
+ window.Worker=class extends RealWorker{
+   constructor(url,options){
+     super(url,options);
+     console.info('[JIJI MP4 worker] started',options?.type||'classic');
+     this.addEventListener('error',event=>console.error('[JIJI MP4 worker] uncaught',event.message,event.filename,event.lineno));
+     this.addEventListener('messageerror',event=>console.error('[JIJI MP4 worker] messageerror',event.type));
+     this.addEventListener('message',event=>{
+       if(event.data?.type==='ERROR')console.error('[JIJI MP4 worker] load/encode error',String(event.data?.data));
+       else if(event.data?.type==='LOAD')console.info('[JIJI MP4 worker] FFmpeg core loaded');
+     });
+   }
+ };
+ let loading;
+ try{loading=f.load({classWorkerURL:worker,coreURL,wasmURL});}
+ finally{window.Worker=RealWorker;}
+ await deadline(loading,90000,'Worker・WASM初期化');
  ffmpeg=f;return f;
 }
 
