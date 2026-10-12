@@ -27,7 +27,7 @@ fi
 trap 'rm -f -- "$out"' ERR
 ffmpeg -hide_banner -nostdin -loglevel error -stats -i "$src" \
   -map 0:v:0 -map 0:a:0 \
-  -c:v libx264 -preset veryfast -crf 21 -pix_fmt yuv420p -r 30 \
+  -c:v libx264 -preset veryfast -crf 21 -vf 'pad=ceil(iw/2)*2:ceil(ih/2)*2' -pix_fmt yuv420p -r 30 \
   -c:a aac -profile:a aac_low -b:a 128k -ar 44100 -ac 2 \
   -movflags +faststart "$out"
 video="$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of default=noprint_wrappers=1:nokey=1 "$out")"
