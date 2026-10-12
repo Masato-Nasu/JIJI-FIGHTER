@@ -410,3 +410,64 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
  await fs.writeFile(path,html,'utf8');
  console.log('LIVE word fetch now starts before Japanese font loading; actual errors are shown.');
 }
+
+
+// JIJI_COURSE_NATIVE_AAC_20261012
+// Keep the published HTML's embedded font and existing game logic untouched.
+// Repair mobile menu scrolling, clarify the start stage, and prefer actual
+// H.264 video + AAC audio MP4 before WebM/Opus where supported.
+{
+ const fs=await import('node:fs/promises');
+ const file=new URL('./dist/index.html',import.meta.url);
+ let h=await fs.readFile(file,'utf8');
+ function replaceOne(before,after,label){
+   const count=h.split(before).length-1;
+   if(count!==1)throw new Error('Course/MP4 build drift '+label+': '+count);
+   h=h.replace(before,after);
+ }
+ replaceOne(
+  "for(const type of ['video/webm;codecs=vp9,opus','video/webm;codecs=vp8,opus','video/webm','video/mp4']){",
+  'for(const type of [\'video/mp4;codecs="avc1.42E01E,mp4a.40.2"\',\'video/mp4;codecs="avc1.4D401E,mp4a.40.2"\',\'video/webm;codecs=vp8,opus\',\'video/webm;codecs=vp9,opus\',\'video/webm\']){',
+  'prefer AAC H.264 before Opus'
+ );
+ // Long mobile menu could not scroll: ancestor #game disabled all touch panning.
+ // The actual flight canvas retains touch-action:none for precise steering.
+ const menuCSS=String.raw`
+<style id="jiji-course-fix">
+#game{touch-action:pan-y}
+#scene,.touch-controls,.fire-button,.bomb-button{touch-action:none}
+#intro{overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y}
+#intro .intro-inner{margin:auto;min-width:0}
+.stage-choice-panel{width:min(100%,340px);margin:11px auto 14px;padding:12px;border:1px solid #777;text-align:left;background:rgba(8,8,8,.88)}
+.stage-choice-panel .stage-choose-label{margin:0 0 7px;font-size:10px;letter-spacing:.11em;color:#fff}
+.stage-choice-panel .stage-chooser{display:block;width:100%;min-height:44px;padding:10px 12px;margin:0;border:1px solid #aaa;border-radius:2px;background:#111;color:#fff;font:500 13px Helvetica,Arial,sans-serif;letter-spacing:.015em;touch-action:auto}
+.stage-choice-panel .stage-chooser option{background:#111;color:#fff}
+.stage-choice-help{font:10px/1.5 Helvetica,Arial,sans-serif;letter-spacing:.025em;color:#aaa;margin:8px 0 0}
+@media(max-width:680px){#intro{padding:18px 16px 28px}#intro .logo-art{margin-top:6px}#intro .stage-choice-panel{margin:9px auto 10px}}
+@media(max-height:690px){#intro .modal-foot{margin-top:10px}#intro .stage-choice-panel{padding:9px 11px}}
+</style>`;
+ replaceOne('</head>',menuCSS+'\\n</head>','course menu CSS');
+ const stageStart=h.indexOf('        <label class="stage-choose-label" for="stageChooser">');
+ const stageEnd=stageStart<0?-1:h.indexOf('        </select>',stageStart);
+ if(stageStart<0||stageEnd<0)throw Error('Cannot locate stage selection');
+ const oldStage=h.slice(stageStart,stageEnd+'        </select>'.length);
+ if(!oldStage.includes('id="stageChooser"')||!oldStage.includes('value="6"'))throw Error('Stage selector unexpected');
+ const newStage=String.raw`        <div class="stage-choice-panel">
+          <label class="stage-choose-label" for="stageChooser">COURSE / 開始ステージ</label>
+          <select id="stageChooser" class="stage-chooser" aria-label="開始ステージを選ぶ">
+            <option value="1">01 — FIRST CONTACT / はじめから</option>
+            <option value="2">02 — MIRROR RUN / 2面から</option>
+            <option value="3">03 — GROUND ZERO / 3面から</option>
+            <option value="4">04 — WORD STORM / 4面から</option>
+            <option value="5">05 — CROSS FIRE / 5面から</option>
+            <option value="6">06 — FINAL FORTRESS / 6面から</option>
+          </select>
+          <p class="stage-choice-help">01は全6面を順番にプレイ。02〜06は途中の面から練習します。</p>
+        </div>`;
+ replaceOne(oldStage,'','remove old stage layout');
+ // Place the course choice before the two sets of recording/difficulty controls.
+ const stateLine='<p id="loadState" class="load-state" role="status">文字の立体データを準備しています…</p>';
+ replaceOne(stateLine,stateLine+'\\n'+newStage,'stage selector location');
+ await fs.writeFile(file,h,'utf8');
+ console.log('Course menu scroll and stage selection clarified; native H.264/AAC recording prioritized.');
+}
