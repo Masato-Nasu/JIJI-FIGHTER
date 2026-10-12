@@ -137,3 +137,13 @@ PY
 `window.JIJI_MUSIC_DIAGNOSTIC` を記録する。
 
 実機確認前にmainへマージ/Cloudflareへデプロイしない。
+
+## GitHub Actionsでの最終確認
+
+コードコミット `fecc586572c83b254bdea76e3d6075e8aca06485` の
+[検証実行38272078896](https://github.com/Masato-Nasu/JIJI-FIGHTER/actions/runs/38272078896) は全工程成功。
+Ubuntu runnerの **Google Chrome 155.0.8059.39** でも、実ローカルサーバーと
+ローカル変換APIを使わない静的Web相当の両方で、連続2録画と死亡自動保存の
+H.264/AACファイルを確認した。別録画でSFXのみ・BGM+SFXの非無音も確認。
+生成した検証動画は同実行の `recording-validation` artifactに保存済み。
+これはLinux Mintのユーザー実機・スマートフォン実機・Xへの実投稿の確認とは区別する。
