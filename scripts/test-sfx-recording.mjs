@@ -4,12 +4,16 @@ import {resolve,extname,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
 import {chromium} from 'playwright';
+import {handleRecordingExport} from '../linux-recording-export.mjs';
 
 const mime={'.html':'text/html; charset=utf-8','.mp3':'audio/mpeg','.js':'text/javascript','.png':'image/png','.webmanifest':'application/manifest+json'};
 const root=resolve('dist');
 const server=createServer(async(req,res)=>{
  try{
   const name=new URL(req.url,'http://localhost').pathname;
+  if(name==='/api/export-mp4'){
+    await handleRecordingExport(req,res,'http://127.0.0.1:'+server.address().port);return;
+  }
   if(name==='/api/trends'){
     res.writeHead(503,{'Content-Type':'application/json'});res.end('{"items":[]}');return;
   }
