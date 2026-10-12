@@ -1,6 +1,6 @@
 const PREFIX='jiji-fighter-'+encodeURIComponent(self.registration.scope)+'-';
-const CACHE=PREFIX+'v0.11.6';
-const CORE=['./','./index.html','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png','./music/mazz-db-2017.mp3'];
+const CACHE=PREFIX+'v0.11.7-mp4';
+const CORE=['./','./index.html','./mp4-share.js','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png','./music/mazz-db-2017.mp3'];
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)));
   // Wait for existing game windows to close; never reload an active mission.
