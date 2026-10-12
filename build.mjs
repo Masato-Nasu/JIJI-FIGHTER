@@ -76,3 +76,67 @@ const newDraw=String.raw`  function drawDestruction(){
 html=html.replace(oldDraw,newDraw);
 await writeFile(outputHtml,html,'utf8');
 console.log('Explosion restored: wall collision and zero hull show visible 2.4s debris before GAME OVER.');
+
+// Mobile BGM route repaired: normal playback must not create a WebAudio graph.
+const musicBefore=String.raw`  function label(){music.textContent=musicOn?'♫ MUSIC ON':'♫ MUSIC OFF';music.setAttribute('aria-pressed',String(musicOn));}
+  async function startMusic(){
+    if(!musicOn)return;
+    // Prepare recording destination before play() and while the click is still active.
+    const audioStream=makeAudioStream();
+    const playPromise=audio.play();
+    try{await playPromise;}catch(_){music.textContent='♫ TAP MUSIC';}
+    return audioStream;
+  }
+  music.addEventListener('click',()=>{
+    musicOn=!musicOn;
+    if(musicOn)startMusic();else audio.pause();
+    label();
+  });
+  // Browser autoplay starts from a real start/resume/restart gesture.
+  for(const id of ['startButton','restartButton','resumeButton']){
+    document.getElementById(id)?.addEventListener('click',()=>{startMusic();});
+  }
+  label();`;
+const musicAfter=String.raw`  // Normal BGM plays natively; do not route speakers through WebAudio
+  // unless the player explicitly selected recording. Critical for mobile.
+  function label(){
+    const playing=musicOn&&!audio.paused&&!audio.error;
+    music.textContent=!musicOn?'♫ MUSIC OFF':audio.error?'♫ MUSIC ERROR':playing?'♫ MUSIC ON':'♫ TAP MUSIC';
+    music.setAttribute('aria-pressed',String(musicOn));
+  }
+  async function startMusic(){
+    if(!musicOn)return;
+    audio.muted=false;audio.volume=.55;audio.loop=true;
+    try{
+      if(audio.networkState===HTMLMediaElement.NETWORK_EMPTY)audio.load();
+      await audio.play();
+    }catch(err){console.warn('BGM cannot start',err);}
+    label();
+  }
+  music.addEventListener('click',()=>{
+    if(!musicOn||audio.paused){musicOn=true;startMusic();}
+    else{musicOn=false;audio.pause();label();}
+  });
+  for(const event of ['play','pause','playing','error','waiting'])audio.addEventListener(event,label);
+  audio.addEventListener('error',()=>console.warn('BGM file unavailable',audio.currentSrc,audio.error?.code));
+  for(const id of ['startButton','restartButton','resumeButton']){
+    document.getElementById(id)?.addEventListener('click',()=>{
+      const wantsRecording=document.querySelector('input[name="recordMode"]:checked')?.value==='record';
+      if(wantsRecording)makeAudioStream();
+      startMusic();
+    });
+  }
+  label();`;
+if(!html.includes(musicBefore))throw Error('Music HTML changed; fix needs review');
+html=html.replace(musicBefore,musicAfter);
+const oldSound='id="audioButton" class="icon-button" type="button" aria-label="サウンドの切り替え" title="Sound on/off">SOUND OFF';
+if(!html.includes(oldSound))throw Error('SFX button changed');
+html=html.replace(oldSound,'id="audioButton" class="icon-button" type="button" aria-label="効果音の切り替え" title="Sound effects on/off">SFX OFF');
+const oldToggle="els.audio.textContent=soundEnabled?'SOUND ON':'SOUND OFF';";
+if(!html.includes(oldToggle))throw Error('SFX toggle changed');
+html=html.replace(oldToggle,"els.audio.textContent=soundEnabled?'SFX ON':'SFX OFF';");
+const oldAudio='id="bgm" preload="auto" loop playsinline src=';
+if(!html.includes(oldAudio))throw Error('BGM element changed');
+html=html.replace(oldAudio,'id="bgm" preload="auto" loop playsinline webkit-playsinline src=');
+await writeFile(outputHtml,html,'utf8');
+console.log('Mobile BGM route repaired; native playback and recording prepared independently.');
