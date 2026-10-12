@@ -2,7 +2,7 @@
 
 Japanese current topics become three-dimensional wireframe enemies. Fly between two mirrored worlds, fire lasers and bombs, and break through six monochrome stages.
 
-**v0.11.6 · Installable PWA · PC / mobile · Japanese topics worldwide**
+**v0.11.15 · Installable PWA · PC / mobile · Japanese topics worldwide**
 
 **[PLAY JIJI FIGHTER / ゲームを起動](https://jiji-fighter.pages.dev/)** · [Source code](https://github.com/Masato-Nasu/JIJI-FIGHTER) · [LIVE WORDS API](https://jiji-fighter.pages.dev/api/trends)
 
@@ -26,6 +26,7 @@ Japanese current topics become three-dimensional wireframe enemies. Fly between 
 
 - Six distinct environments, each evolving through three sections.
 - Japanese kanji, hiragana and katakana enemies built from font outlines.
+- TREND MODE shows fewer 3D word enemies as later stages advance: opening group 3, capped at 4–7 simultaneous glyphs by stage, with no multi-word reinforcement bursts. CLASSIC and bosses are unchanged.
 - Live topics from Google Trends Japan, public Bluesky and Japanese news RSS.
 - A mirrored underside reached by an automatic aircraft roll.
 - Simultaneous lasers and bombs, three hull difficulty settings, stage practice.
@@ -71,6 +72,19 @@ The original MP3 plays locally when **START MISSION** is tapped, and loops throu
 スマホで敵の弾が当たって耐久力が0％になっても、機体が爆発してからGAME OVERになります。複数の弾が同じ瞬間に当たっても爆発を省略しません。
 
 スマホでは **START MISSION** を押すとBGMが始まり、控えめな音量でループ再生されます。**SFXは初期ON**で、音量を下げています。**STOP GAME** を押すと開始画面に戻り、音楽も停止します。撃墜時は爆発中もBGMが続き、爆発後に約0.8秒の余韻を置いて約0.65秒でフェードアウトします。その後、録画を自動保存します。**録画動画にはBGMだけでなくレーザーや爆発などのSFXも収録します。**音が止まっている場合は **TAP MUSIC** を押してください。SFXは効果音だけの切り替えです。スマホの標準ギャラリーでWebM（Opus音声）の再生に対応していない場合は、ブラウザや対応する動画プレーヤーで開いてください。更新が見えない場合は、インストール済みアプリを一度完全に閉じて再度開いてください。
+
+## PC video codec / PC録画の音声互換性
+
+When a browser can record H.264 video with AAC audio, the MP4 is saved directly. Otherwise the PC exporter attempts to transcode the recording in the browser. This requires a large WebAssembly video engine and may fail or take longer on some PCs. If it fails, the original recording is **saved automatically** so it is not lost. The mobile workflow, which has been used successfully for X posting, is left unchanged.
+
+On Linux Mint, the reliable fallback uses the operating system FFmpeg. From the checked-out repository, run:
+
+```bash
+sudo apt install ffmpeg
+bash scripts/convert-recording-linux.sh
+```
+
+The script picks the latest `JIJI-FIGHTER*.webm` or `.mp4` recording in Downloads, creates `-X-COMPATIBLE.mp4`, then verifies that the video codec is H.264 and the audio codec is AAC. The source recording is preserved. You can also pass an exact recording path to the script as its first argument. Encoding a local WebM test clip to H.264/AAC was verified; success of the browser's automatic conversion is not yet guaranteed.
 
 ## Install / ホーム画面に追加
 
