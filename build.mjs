@@ -392,3 +392,21 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
  }
  console.log('MP4 recording conversion bridge included.');
 }
+
+
+// TREND_FETCH_UNBLOCK_20261012
+// The original client delayed its API request until an ~8 MB embedded font was ready.
+// Begin fetching LIVE topics immediately and show the actual error rather than a generic prompt.
+{
+ const fs=await import('node:fs/promises');
+ const path=new URL('./dist/index.html',import.meta.url);
+ let html=await fs.readFile(path,'utf8');
+ const changes=[["  async function refresh(){\n    await ready;\n    const request=++revision;\n    let timer;\n    try{\n      const rows=await Promise.race([provider(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('取得がタイムアウトしました')),22000);})]);","  async function refresh(){\n    const request=++revision;\n    let timer;\n    try{\n      // Request the public topics immediately, before the large JP font finishes loading.\n      // This avoids making a successful API appear unavailable during slow font setup.\n      const feedRequest=provider();\n      const rows=await Promise.race([feedRequest,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('話題語APIが45秒以内に応答しませんでした')),45000);})]);\n      await ready;"],[":'LIVE話題語が取得できません。接続と公開先を確認し、RELOADしてください。サンプルでは代用しません。';",":'LIVE取得失敗：'+String(result.error||'通信エラー').slice(0,140)+' / サンプル語なし';"]];
+ for(const [before,after] of changes){
+   const count=html.split(before).length-1;
+   if(count!==1)throw new Error('TREND fetch patch drift: expected one match, found '+count);
+   html=html.replace(before,after);
+ }
+ await fs.writeFile(path,html,'utf8');
+ console.log('LIVE word fetch now starts before Japanese font loading; actual errors are shown.');
+}
