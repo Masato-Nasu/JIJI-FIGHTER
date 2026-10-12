@@ -1,5 +1,5 @@
 const PREFIX='jiji-fighter-'+encodeURIComponent(self.registration.scope)+'-';
-const CACHE=PREFIX+'v0.11.2';
+const CACHE=PREFIX+'v0.11.3';
 const CORE=['./','./index.html','./manifest.webmanifest','./icons/icon-192.png','./icons/icon-512.png','./icons/apple-touch-icon.png','./music/mazz-db-2017.mp3'];
 self.addEventListener('install',event=>{
   event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)));
