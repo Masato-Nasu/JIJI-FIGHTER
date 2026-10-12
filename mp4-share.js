@@ -27,7 +27,7 @@ let active=false,mp4File=null,dialog=null,ffmpeg=null,sourceURL=null;
 const approvedDownloads=new WeakSet();
 
 function ui(message){if(!dialog){dialog=document.createElement('section');dialog.id='jiji-mp4-share';dialog.style.cssText='position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:2147483647;background:#090909;color:white;border:1px solid #aaa;padding:12px;min-width:270px;max-width:calc(100vw - 32px);font:13px system-ui;text-align:center';dialog.innerHTML='<p id="jiji-mp4-status"></p><button id="jiji-mp4-close">閉じる</button>';document.body.append(dialog);dialog.querySelector('#jiji-mp4-close').onclick=()=>{dialog.remove();dialog=null;};}dialog.querySelector('#jiji-mp4-status').textContent=message;}
-function save(file){const link=document.createElement('a');link.download=file.name;link.href=createURL(file);approvedDownloads.add(link);originalClick.call(link);setTimeout(()=>URL.revokeObjectURL(link.href),60000);}
+function save(file){const link=document.createElement('a');link.download=file.name;link.href=createURL(file);approvedDownloads.add(link);document.body.appendChild(link);try{originalClick.call(link);}finally{link.remove();}setTimeout(()=>URL.revokeObjectURL(link.href),60000);}
 function problem(e){return e instanceof Error?e.message:(e?.message||e?.type||e?.name||String(e||'不明なエラー'));}
 function deadline(promise,ms,label){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(label+'が'+Math.ceil(ms/1000)+'秒以内に完了しませんでした。通信・ブラウザ制限を確認してください')),ms);})]).finally(()=>clearTimeout(timer));}
 async function blobUrl(url,type,label){ui('MP4エンジン: '+label+' を取得中…');const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);try{const response=await fetch(url,{signal:controller.signal,cache:'force-cache'});if(!response.ok)throw Error(label+' HTTP '+response.status);return createURL(new Blob([await response.arrayBuffer()],{type}));}catch(e){throw Error(label+' の取得に失敗: '+problem(e));}finally{clearTimeout(timer);}}
@@ -137,7 +137,8 @@ async function convert(url,downloadName){
      const link=document.createElement('a');
      link.download=fallbackName;link.href=sourceURL;
      approvedDownloads.add(link);
-     originalClick.call(link);
+     document.body.appendChild(link);
+     try{originalClick.call(link);}finally{link.remove();}
    }catch(downloadError){console.error('Recording backup failed',downloadError);}
 
  }finally{active=false;}
