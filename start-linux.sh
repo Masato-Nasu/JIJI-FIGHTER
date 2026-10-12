@@ -9,4 +9,5 @@ if ! node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0
   echo "Node.js 22以上が必要です。"
   exit 1
 fi
+node build.mjs
 exec node linux-server.mjs
