@@ -9,6 +9,10 @@ const BSKY_ALTERNATE='https://public.api.bsky.app/xrpc/app.bsky.unspecced.getTre
 const MAX_PERSON_SHARE=.10;
 const GOOGLE_NEWS='https://news.google.com/rss?hl=ja&gl=JP&ceid=JP:ja';
 const YAHOO_NEWS='https://news.yahoo.co.jp/rss/topics/top-picks.xml';
+// Two independent Japanese publishers keep the game usable when Google's RSS
+// is throttled or one SNS provider changes its API.
+const NHK_NEWS='https://www3.nhk.or.jp/rss/news/cat0.xml';
+const ITMEDIA_NEWS='https://rss.itmedia.co.jp/rss/2.0/news_bursts.xml';
 // Additional real, recent Japanese news RSS feeds (not sample words).
 const NEWS_QUERIES=['テクノロジー','経済','天気 災害','アニメ ゲーム','スポーツ','科学 宇宙'];
 const ADDITIONAL_NEWS=NEWS_QUERIES.map(q=>'https://news.google.com/rss/search?'+new URLSearchParams({q,hl:'ja',gl:'JP',ceid:'JP:ja'}));
@@ -19,7 +23,7 @@ const SUBJECT_END=/(地震|震度|台風|暴風|警報|速報|選挙|国会|政�
 const PERSON_END=/(さん|氏|容疑者|被告|議員|首相|総理|大統領|監督|俳優|女優|歌手|選手|教授|社長|会長|騎手|王子|王女|声優|知事|市長|アナウンサー)$/;
 function clearTopic(word){return SUBJECT_END.test(word)&&!PERSON_END.test(word);}
 const TOPIC_HINT=/(地震|台風|天気|地理|経済|事件|災害|事故|選挙|戦争|政策|法律|政府|政党|大臣|鉄道|新幹線|電車|バス|飛行機|空港|国際|天文|宇宙|科学|技術|情報|通信|株式|市場|銀行|世界|教育|大学|学校|選手権|競技|大会|映画|劇場|漫画|アニメ|放送|番組|ドラマ|作品|音楽|曲|ゲーム|小説|新聞|雑誌|施設|企業|会社|都市|県|市|区|町|村|地方|国|天皇|住宅|機械|人工|電子|写真|文化|歴史|博物館|観光|動物|植物|感染|医療|研究|物理|数学|交通|機関|運動|商品|自動車|駅|島|山|川|海|橋|城|地名|建築|試験|祭り|火山|温泉|決勝|優勝|危機|物価|輸送|貨物|花火|衛星)/;
-const TTL=600;  // 15 minutes (edge cache, subject to host policy)
+const TTL=600;  // 10 minutes (edge cache, subject to host policy)
 let pending=null;
 const json=(body,status=200)=>new Response(JSON.stringify(body),{
   status,
@@ -210,14 +214,27 @@ export function mixFeeds(g,b,news=[],yahoo=[],personSet=new Set(),knownSet=new S
 
 async function buildFeed(){
   const tasks=[google(),bluesky(),newsRss(GOOGLE_NEWS,'Google News'),newsRss(YAHOO_NEWS,'Yahoo News'),
-    ...ADDITIONAL_NEWS.map((url,i)=>newsRss(url,'Google News '+NEWS_QUERIES[i]))];
+    ...ADDITIONAL_NEWS.map((url,i)=>newsRss(url,'Google News '+NEWS_QUERIES[i])),
+    newsRss(NHK_NEWS,'NHK News'),newsRss(ITMEDIA_NEWS,'ITmedia News')];
   const settled=await Promise.allSettled(tasks);
   const from=i=>settled[i].status==='fulfilled'?settled[i].value:null;
   const g=from(0)||[],b=from(1)||[],gn=from(2)||{words:[],headlines:0},yn=from(3)||{words:[],headlines:0};
-  const extras=settled.slice(4).filter(e=>e.status==='fulfilled').map(e=>e.value);
-  const extraWords=[...new Set(extras.flatMap(e=>e.words))];
-  const metadata=await findPeople([...g,...b,...gn.words,...yn.words,...extraWords]);
+  const extras=settled.slice(4,4+NEWS_QUERIES.length).filter(e=>e.status==='fulfilled').map(e=>e.value);
+  const nhk=from(4+NEWS_QUERIES.length)||{words:[],headlines:0};
+  const itmedia=from(5+NEWS_QUERIES.length)||{words:[],headlines:0};
+  const extraWords=[...new Set([...extras.flatMap(e=>e.words),...nhk.words,...itmedia.words])];
+  // Wikidata enrichment used to delay EVERY successful request, even when live
+  // topics were already available. Local lexical filtering is sufficient for
+  // gameplay and never blocks on a second round of remote calls.
+  const metadata={people:new Set(),known:new Set(),nonpeople:new Set()};
   let combined=mixFeeds(g,b,gn.words,yn.words,metadata.people,metadata.known,metadata.nonpeople,extraWords);
+  if(!combined.items.length){
+    // Every item below still originates in a current public provider.
+    // Do not fail with NO_LIVE_WORDS merely because classification was strict.
+    const unclassified=[...new Set([...g,...b,...gn.words,...yn.words,...extraWords])]
+      .map(textClean).filter(word=>word&&!PERSON_END.test(word)).slice(0,40);
+    if(unclassified.length)combined={...combined,items:unclassified.map((text,i)=>({text,rank:i+1,source:'public-feed'}))};
+  }
   // If every live RSS/social provider fails, use actual (dated) Japanese
   // Wikipedia page-view rankings rather than pretending samples are live.
   let wikipediaFallback=null;
@@ -238,10 +255,14 @@ async function buildFeed(){
     bluesky:{ok:!!from(1),count:combined.counts.bluesky,raw:b.length},
     googleNews:{ok:!!from(2),count:combined.counts.googleNews,raw:gn.words.length,headlines:gn.headlines},
     yahooNews:{ok:!!from(3),count:combined.counts.yahooNews,raw:yn.words.length,headlines:yn.headlines},
-    newsExtra:{ok:extras.length>0,count:combined.counts.newsExtra,raw:extraWords.length,
-      feeds_ok:extras.length,feeds_total:NEWS_QUERIES.length,headlines:extras.reduce((n,e)=>n+e.headlines,0)}
+    newsExtra:{ok:extras.length>0||!!from(4+NEWS_QUERIES.length)||!!from(5+NEWS_QUERIES.length),
+      count:combined.counts.newsExtra,raw:extraWords.length,
+      feeds_ok:extras.length+Number(!!from(4+NEWS_QUERIES.length))+Number(!!from(5+NEWS_QUERIES.length)),
+      feeds_total:NEWS_QUERIES.length+2,
+      headlines:extras.reduce((n,e)=>n+e.headlines,0)+nhk.headlines+itmedia.headlines}
   };
-  const failed=settled.map((r,i)=>r.status==='rejected'?{provider:i<4?['google','bluesky','googleNews','yahooNews'][i]:NEWS_QUERIES[i-4],error:String(r.reason?.message||'error')}:null).filter(Boolean);
+  const feedNames=['google','bluesky','googleNews','yahooNews',...NEWS_QUERIES,'NHK News','ITmedia News'];
+  const failed=settled.map((r,i)=>r.status==='rejected'?{provider:feedNames[i],error:String(r.reason?.message||'error')}:null).filter(Boolean);
   if(!combined.items.length)return json({error:'NO_LIVE_WORDS',sources,failed,live_count:0,sample_count:0},503);
   return json({source:'public-trends',region:wikipediaFallback?.ok?'Japanese Wikipedia historical pageviews (not live)': 'Google Trends Japan; Bluesky public/global; Japanese published news RSS',
     updated_at:new Date().toISOString(),rank_method:wikipediaFallback?.ok?'Historical Japanese Wikipedia pageviews, not live trending terms':'Game-order of real RSS search terms, SNS topics and recent headline terms; NOT a unified popularity ranking',
@@ -252,11 +273,40 @@ async function buildFeed(){
 
 export async function onRequestGet({request,waitUntil}){
   const url=new URL(request.url);
-  const key=new Request(`${url.origin}/api/trends?edition=live-with-wikipedia-fallback-v2`,{method:'GET'});
+  const key=new Request(`${url.origin}/api/trends?edition=live-multisource-v3`,{method:'GET'});
+  const backupKey=new Request(`${url.origin}/api/trends?edition=last-real-feed-v3`,{method:'GET'});
   const cache=typeof caches!=='undefined'&&caches.default?caches.default:null;
   if(cache){try{const hit=await cache.match(key);if(hit)return hit;}catch(_){/* cache unavailable */}}
-  if(!pending)pending=buildFeed().finally(()=>pending=null);
+  if(!pending)pending=buildFeed().catch(error=>json({
+    error:'TREND_PIPELINE_FAILED',detail:String(error?.message||error),live_count:0,sample_count:0
+  },503)).finally(()=>pending=null);
   const response=await pending;
-  if(response.ok&&cache){const task=cache.put(key,response.clone());if(typeof waitUntil==='function')waitUntil(task);else await task;}
+  if(response.ok){
+    if(cache){
+      const fresh=cache.put(key,response.clone()).catch(error=>console.warn('Trend cache:',error));
+      // A previous VERIFIED feed can be served for up to 24h when all live
+      // sources are unreachable. Never label the preserved data as live.
+      const preserved=new Response(response.clone().body,{headers:{
+        'Content-Type':'application/json; charset=utf-8','Cache-Control':'public, max-age=86400',
+        'X-Content-Type-Options':'nosniff'}});
+      const older=cache.put(backupKey,preserved).catch(error=>console.warn('Trend backup:',error));
+      if(typeof waitUntil==='function'){waitUntil(fresh);waitUntil(older);}
+      else await Promise.all([fresh,older]);
+    }
+    return response;
+  }
+  if(cache){
+    try{
+      const previous=await cache.match(backupKey);
+      if(previous){
+        const saved=await previous.json();
+        if(Array.isArray(saved.items)&&saved.items.length){
+          return json({...saved,source:'previously fetched public news/trends (NOT current)',
+            stale:true,stale_reason:'live providers unavailable',
+            latest_error:(await response.clone().json().catch(()=>({}))).error||'NO_LIVE_WORDS'},200);
+        }
+      }
+    }catch(error){console.warn('Trend backup read:',error);}
+  }
   return response;
 }
