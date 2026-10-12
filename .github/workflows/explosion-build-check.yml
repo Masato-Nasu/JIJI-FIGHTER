@@ -42,5 +42,9 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Play BGM in desktop and mobile browsers
         run: node scripts/test-music.mjs
+      - name: Install audio analyzer
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
       - name: Decode saved recordings and verify audible BGM
         run: node scripts/test-recorded-audio.mjs
