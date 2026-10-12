@@ -318,3 +318,42 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
  await fs.writeFile(path,content,'utf8');
  console.log('BGM and synthesized SFX now share one recorded audio track.');
 }
+
+
+// LETHAL_HIT_FRAME_ABORT_V1
+// Multiple bullets can arrive in the SAME frame. A lethal hit clears enemies,
+// projectiles and targets in beginDestruction(). Every collision loop must
+// RETURN from update() before trying to use elements from those cleared arrays.
+{
+  const fs=await import('node:fs/promises');
+  const output=new URL('./dist/index.html',import.meta.url);
+  let h=await fs.readFile(output,'utf8');
+  function single(from,to,what){
+    const count=h.split(from).length-1;
+    if(count!==1)throw Error('Lethal-hit build drift '+what+': '+count);
+    h=h.replace(from,to);
+  }
+  single("function damage(amount){\n     if(mode!=='playing'||player.invuln>0)return;",
+    "function damage(amount){\n     if(mode!=='playing'||player.invuln>0)return false;",
+    'damage skipped return');
+  single("hull=Math.max(0,hull-amount*setting.damage);combo=0;flash=.29;shake=9;",
+    "hull=Math.max(0,hull-amount*setting.damage);if(hull<.5)hull=0;combo=0;flash=.29;shake=9;",
+    'displayed zero equals real zero');
+  single("toast('HULL DAMAGE',.85);hud();if(hull<=0)end();",
+    "if(hull<=0){hud();end(false,'HULL DEPLETED');return true;}\n     toast('HULL DAMAGE',.85);hud();return false;",
+    'switch fatal bullet to destruction');
+  single("damage(30+3*wave);",
+    "if(damage(30+3*wave))return;",
+    'ground emplacement contact');
+  single("damage(37+wave*2);",
+    "if(damage(37+wave*2))return;",
+    '3D trend word contact');
+  single("if(Math.hypot(e.x-player.x,Math.min(Math.abs(e.y-player.y),Math.abs(mirrorY(e.y)-player.y)))<4.5)damage(34+2*wave);",
+    "if(Math.hypot(e.x-player.x,Math.min(Math.abs(e.y-player.y),Math.abs(mirrorY(e.y)-player.y)))<4.5 && damage(34+2*wave))return;",
+    'enemy contact');
+  single("if(b.z<9){if(Math.hypot(b.x-player.x,b.y-player.y)<2.7)damage(b.damage||22+Math.floor(wave*1.5));enemyShots.splice(i,1);}",
+    "if(b.z<9){if(Math.hypot(b.x-player.x,b.y-player.y)<2.7 && damage(b.damage||22+Math.floor(wave*1.5)))return;enemyShots.splice(i,1);}",
+    'multiple bullets same frame');
+  await fs.writeFile(output,h,'utf8');
+  console.log('Lethal projectiles and enemy contacts now always enter visible destruction without crashing the frame.');
+}
