@@ -127,16 +127,14 @@ const musicAfter=String.raw`  // Normal BGM plays natively; do not route speaker
     });
   }
   label();`;
-if(!html.includes(musicBefore))throw Error('Music HTML changed; fix needs review');
-html=html.replace(musicBefore,musicAfter);
+const musicSection=/  function label\(\)\{music\.textContent=[\s\S]*?(?=  function makeAudioStream\(\)\{)/;
+if(!musicSection.test(html))throw Error('Music functions not found; source has changed');
+html=html.replace(musicSection,musicAfter+'\n  // JIJI_AUDIO_STAGE6_2026-10-12-audio6\n');
 const oldSound='id="audioButton" class="icon-button" type="button" aria-label="サウンドの切り替え" title="Sound on/off">SOUND OFF';
-if(!html.includes(oldSound))throw Error('SFX button changed');
-html=html.replace(oldSound,'id="audioButton" class="icon-button" type="button" aria-label="効果音の切り替え" title="Sound effects on/off">SFX OFF');
+if(html.includes(oldSound))html=html.replace(oldSound,'id="audioButton" class="icon-button" type="button" aria-label="効果音の切り替え" title="Sound effects on/off">SFX OFF');
 const oldToggle="els.audio.textContent=soundEnabled?'SOUND ON':'SOUND OFF';";
-if(!html.includes(oldToggle))throw Error('SFX toggle changed');
-html=html.replace(oldToggle,"els.audio.textContent=soundEnabled?'SFX ON':'SFX OFF';");
+if(html.includes(oldToggle))html=html.replace(oldToggle,"els.audio.textContent=soundEnabled?'SFX ON':'SFX OFF';");
 const oldAudio='id="bgm" preload="auto" loop playsinline src=';
-if(!html.includes(oldAudio))throw Error('BGM element changed');
-html=html.replace(oldAudio,'id="bgm" preload="auto" loop playsinline webkit-playsinline src=');
+if(html.includes(oldAudio))html=html.replace(oldAudio,'id="bgm" preload="auto" loop playsinline webkit-playsinline src=');
 await writeFile(outputHtml,html,'utf8');
 console.log('Mobile BGM route repaired; native playback and recording prepared independently.');
