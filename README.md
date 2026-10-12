@@ -38,7 +38,7 @@ Ranks are the game's combined order of search terms, social topics and news-deri
 
 ## Play locally on Linux / Linuxで起動
 
-Node.js 22+ is required. No npm dependencies or API keys are needed.
+Node.js 22+ and FFmpeg are required for local desktop MP4 conversion. No npm dependencies or API keys are needed. Install FFmpeg on Linux Mint with `sudo apt install -y ffmpeg`.
 
 ```bash
 git clone https://github.com/Masato-Nasu/JIJI-FIGHTER.git
@@ -75,14 +75,20 @@ The original MP3 plays locally when **START MISSION** is tapped, and loops throu
 
 ## PC video codec / PC録画の音声互換性（Linux Chrome）
 
-**Linux Mint + Google Chrome:** PC recordings use the operating system's FFmpeg for reliable H.264 video and AAC audio conversion when the game is started **locally** with `bash start-linux.sh`. The game serves a loopback-only conversion endpoint at `/api/export-mp4`. Recording bytes never leave your PC for conversion, and the existing mobile recording workflow remains unchanged.
+After deploying this revision, desktop recordings are saved as **MP4 with H.264 video and AAC audio**. BGM and laser/explosion SFX share one recorded audio track. Export supports repeated takes and automatic saving after GAME OVER.
+
+- **Published website:** when native H.264/AAC recording is unavailable, a bundled single-thread FFmpeg engine converts the recording inside the browser. No conversion server, external CDN, or local FFmpeg installation is required.
+- **Linux local server:** `bash start-linux.sh` uses the operating system's FFmpeg via a loopback-only endpoint at `/api/export-mp4`.
+- Both paths inspect the output before downloading it. Failed conversions retain the original recording and expose a backup download. Existing mobile recording stays on its original path.
+
+Google Chrome on the Linux CI runner passed repeated recording, GAME OVER saving, original BGM playback/recovery, and saved-file H.264/AAC/audio checks for both paths. This does not replace Linux Mint and phone device checks or an actual X upload. [Validation report](DESKTOP-RECORDING-VALIDATION.md) · [Successful recording tests](https://github.com/Masato-Nasu/JIJI-FIGHTER/actions/runs/38272078896)
 
 Install FFmpeg and use a **fresh Chrome profile** to avoid the old PWA cache. Your normal Chrome profile and settings are not deleted:
 
 ```bash
 sudo apt install -y ffmpeg
 cd "$(xdg-user-dir DESKTOP)"
-git clone --branch fix/desktop-recording-01116 --single-branch \
+git clone --branch main --single-branch \
   https://github.com/Masato-Nasu/JIJI-FIGHTER.git JIJI-FIGHTER-PC-FIX
 cd JIJI-FIGHTER-PC-FIX
 bash start-linux-chrome.sh
@@ -96,11 +102,11 @@ git pull --ff-only
 bash start-linux-chrome.sh
 ```
 
-Only play in the fresh Chrome window that opens automatically, at `http://127.0.0.1:<port>`. Do not use the published `jiji-fighter.pages.dev` URL to test local FFmpeg export. If the popup says **Worker・WASM**, it is an older version, not this Linux-only converter. Close that older game tab. The fresh Chrome profile is placed under the system temporary directory and does not replace your normal Chrome data.
+Only play in the fresh Chrome window that opens automatically, at `http://127.0.0.1:<port>`. Do not use the published `jiji-fighter.pages.dev` URL to test local FFmpeg export. If the popup says **Worker・WASMを初期化中…**, it is the obsolete exporter, not the current local converter. Close that older game tab. The fresh Chrome profile is placed under the system temporary directory and does not replace your normal Chrome data.
 
 When a recording completes, the original is retained in memory and available through **「元動画を保存」**. On successful conversion, a H.264/AAC MP4 downloads automatically; **「MP4を保存」** retries the download manually if Chrome blocked it. If conversion fails, the WebM original is saved instead and may be re-saved using the on-screen button. The original phone capture/share path is not intercepted.
 
-**Important:** A copy running from a public Cloudflare Pages URL cannot access your Linux FFmpeg directly and will save the original recording rather than claim it is an X-compatible MP4. Run the local Linux server for automatic H.264/AAC MP4 export.
+**Published and local export are separate:** the public website cannot access your Linux FFmpeg. It uses the bundled browser encoder instead. Browser conversion downloads about 31 MB of engine assets and can take time on slower PCs; keep the tab open. If conversion fails, use the retained original recording. H.264/AAC codec validation does not guarantee every file meets X duration/size limits.
 
 There is also a manual FFmpeg converter for an already saved WebM recording:
 
@@ -131,6 +137,6 @@ Cross the mirror plane to enter the other world. Walls destroy the aircraft on e
 
 Game and original music: **Masato Nasu**. Music: [MAZZ DB 2017](https://soundcloud.com/android-shaman/mazz-db-2017).
 
-The game bundles **opentype.js** (MIT) and **Noto Sans JP** (SIL Open Font License). Existing embedded attribution is retained. No blanket open-source license is granted for the game or music by this repository.
+The game bundles **opentype.js** (MIT) and **Noto Sans JP** (SIL Open Font License). Existing embedded attribution is retained. The separately bundled `@ffmpeg/core` 0.12.10 is GPL-2.0-or-later; see [encoder credits and source information](encoder/README.md) and [license](encoder/COPYING). No blanket open-source license is granted for the game or music by this repository.
 
 Documentation images are captured from the game's Canvas; the lead image is a staged demo of multiple word enemies rather than a claim about the live ranking at the moment of capture.
