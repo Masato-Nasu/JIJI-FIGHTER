@@ -4,6 +4,7 @@ import {resolve,extname,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {execFileSync} from 'node:child_process';
 import {chromium} from 'playwright';
+import {handleRecordingExport} from '../linux-recording-export.mjs';
 
 const root=resolve('dist');
 const mimetypes={'.html':'text/html; charset=utf-8','.mp3':'audio/mpeg','.js':'text/javascript',
@@ -11,6 +12,9 @@ const mimetypes={'.html':'text/html; charset=utf-8','.mp3':'audio/mpeg','.js':'t
 const server=createServer(async(req,res)=>{
  try{
   const path=new URL(req.url,'http://localhost').pathname;
+  if(path==='/api/export-mp4'){
+    await handleRecordingExport(req,res,'http://127.0.0.1:'+server.address().port);return;
+  }
   if(path==='/api/trends'){
    res.writeHead(503,{'Content-Type':'application/json'});
    res.end('{"items":[]}');return;
