@@ -1,7 +1,7 @@
 /* MP4 export bridge for JIJI FIGHTER — converts recorded WebM to H.264/AAC MP4 */
 (()=>{
 'use strict';
-if(window.__jijiMp4Bridge)return;window.__jijiMp4Bridge=true;console.info('JIJI MP4 bridge fix-2 loaded');
+if(window.__jijiMp4Bridge)return;window.__jijiMp4Bridge=true;console.info('JIJI MP4 H264 AAC verified bridge loaded');
 // Prefer native H.264/AAC MP4 capture where the browser actually supports it.
 // Preserve the constructor API and avoid FFmpeg initialization on those browsers.
 const NativeRecorder=window.MediaRecorder;
@@ -44,6 +44,92 @@ async function engine(){
  await deadline(f.load({classWorkerURL:worker,coreURL,wasmURL}),30000,'Worker・WASM初期化');
  ffmpeg=f;return f;
 }
-async function convert(url){if(active)return;active=true;sourceURL=url;try{ui('録画をMP4に変換しています…');const source=await(await fetch(url)).blob();if(!source.size)throw Error('録画データが空です');const head=new Uint8Array(await source.slice(0,16).arrayBuffer());const mp4Signature=head.length>=8&&String.fromCharCode(...head.slice(4,8))==='ftyp';if(mp4Signature){mp4File=new File([source],'JIJI-FIGHTER-'+new Date().toISOString().replace(/[:.]/g,'-')+'.mp4',{type:'video/mp4'});ui('ネイティブMP4録画完了。');save(mp4File);return;}const f=await engine();await deadline(f.writeFile('input.webm',new Uint8Array(await source.arrayBuffer())),20000,'録画読み込み');ui('H.264映像＋AAC音声に変換中…');const exit=await deadline(f.exec(['-y','-i','input.webm','-c:v','libx264','-preset','ultrafast','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart','output.mp4']),120000,'MP4変換');if(exit!==0)throw Error('エンコード失敗 '+exit);const data=await f.readFile('output.mp4');if(data.length<1024)throw Error('MP4データが空です');mp4File=new File([data],'JIJI-FIGHTER-'+new Date().toISOString().replace(/[:.]/g,'-')+'.mp4',{type:'video/mp4'});ui('MP4変換完了。');save(mp4File);await f.deleteFile('input.webm').catch(()=>{});await f.deleteFile('output.mp4').catch(()=>{});}catch(e){console.error('MP4 export error',e);const details=problem(e);ui('MP4修正版 2: 変換失敗 '+details+' — 元録画は保持しています');if(dialog&&!dialog.querySelector('#jiji-webm-backup')){const b=document.createElement('button');b.id='jiji-webm-backup';b.textContent='元動画を保存';b.onclick=()=>{const a=document.createElement('a');a.download='JIJI-FIGHTER-original.webm';a.href=sourceURL;originalClick.call(a)};dialog.append(b);}}finally{active=false;}}
-HTMLAnchorElement.prototype.click=function(){if(this.href.startsWith('blob:')&&/\.webm$/i.test(this.download||'')){void convert(this.href);return;}return originalClick.call(this);};
+
+async function codecInfo(blob){
+ // A .mp4 suffix and MediaRecorder.isTypeSupported do not guarantee AAC.
+ // Inspect the actual ISO BMFF sample-entry tags before accepting a native file.
+ const first=new Uint8Array(await blob.slice(0,Math.min(blob.size,4*1024*1024)).arrayBuffer());
+ const mp4=first.length>=8&&String.fromCharCode(...first.subarray(4,8))==='ftyp';
+ if(!mp4)return {mp4:false,h264:false,aac:false,opus:false};
+ const decoder=new TextDecoder('latin1');
+ let text=decoder.decode(first);
+ if(blob.size>first.byteLength){
+   text+=decoder.decode(await blob.slice(Math.max(first.byteLength,blob.size-4*1024*1024)).arrayBuffer());
+ }
+ return {
+   mp4:true,
+   h264:/(?:avc1|avc3)/.test(text),
+   aac:text.includes('mp4a'),
+   opus:/(?:Opus|opus)/.test(text)
+ };
+}
+function compatible(x){return x.mp4&&x.h264&&x.aac&&!x.opus;}
+function filename(){return 'JIJI-FIGHTER-'+new Date().toISOString().replace(/[:.]/g,'-')+'.mp4';}
+async function convert(url,downloadName){
+ if(active)return;
+ active=true;sourceURL=url;
+ try{
+   ui('保存動画の映像・音声コーデックを確認しています…');
+   const response=await fetch(url);
+   if(!response.ok)throw Error('録画データ HTTP '+response.status);
+   const source=await response.blob();
+   if(source.size<1024)throw Error('録画データが空か不完全です');
+   const inputCodec=await codecInfo(source);
+   console.info('[JIJI MP4] captured track signatures',inputCodec,'blob type',source.type);
+   if(compatible(inputCodec)){
+     mp4File=new File([source],filename(),{type:'video/mp4'});
+     ui('H.264映像＋AAC音声を確認。MP4を保存します。');
+     save(mp4File);
+     return;
+   }
+
+   // Even if the browser gave an MP4 container, it may contain Opus audio.
+   // Never pass that through to X/phone galleries as a supposedly compatible MP4.
+   const ff=await engine();
+   const input=inputCodec.mp4?'input.mp4':'input.webm';
+   const bytes=new Uint8Array(await source.arrayBuffer());
+   await deadline(ff.writeFile(input,bytes),20000,'録画読み込み');
+   ui('互換形式 H.264映像＋AAC音声へ変換しています…');
+   const args=['-y','-i',input,'-map','0:v:0','-map','0:a:0',
+     '-c:v',inputCodec.h264?'copy':'libx264'];
+   if(!inputCodec.h264)args.push('-preset','ultrafast','-pix_fmt','yuv420p');
+   args.push('-c:a','aac','-b:a','128k','-ar','44100','-movflags','+faststart','output.mp4');
+   const code=await deadline(ff.exec(args),180000,'H.264/AAC変換');
+   if(code!==0)throw Error('変換エンジン終了コード '+code+'。動画・音声が正常に記録されたか確認してください');
+   const result=await ff.readFile('output.mp4');
+   if(result.byteLength<1024)throw Error('変換後の動画が空です');
+   const converted=new Blob([result],{type:'video/mp4'});
+   const outputCodec=await codecInfo(converted);
+   console.info('[JIJI MP4] encoded track signatures',outputCodec);
+   if(!compatible(outputCodec))throw Error('変換後もH.264/AAC音声を確認できなかったため、互換性のないMP4は保存しません');
+   mp4File=new File([converted],filename(),{type:'video/mp4'});
+   ui('H.264/AACの確認完了。MP4を保存します。');
+   save(mp4File);
+   await ff.deleteFile(input).catch(()=>{});
+   await ff.deleteFile('output.mp4').catch(()=>{});
+ }catch(e){
+   console.error('JIJI compatible MP4 export failed',e);
+   ui('MP4変換できませんでした: '+problem(e)+'。互換性のない動画をMP4として保存することはしません。');
+   if(dialog&&!dialog.querySelector('#jiji-original-backup')){
+     const button=document.createElement('button');
+     button.id='jiji-original-backup';
+     button.textContent='元の録画を保存（投稿互換性は保証されません）';
+     button.onclick=()=>{
+       const link=document.createElement('a');
+       link.download=(downloadName||'JIJI-FIGHTER-original.webm');
+       link.href=sourceURL;originalClick.call(link);
+     };
+     dialog.append(button);
+   }
+ }finally{active=false;}
+}
+HTMLAnchorElement.prototype.click=function(){
+ const name=this.download||'';
+ // Intercept BOTH mp4 and webm. Native mp4 can contain unsupported Opus audio.
+ if(this.href.startsWith('blob:')&&/\.(?:webm|mp4)$/i.test(name)){
+   void convert(this.href,name);
+   return;
+ }
+ return originalClick.call(this);
+};
 })();
