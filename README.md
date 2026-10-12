@@ -2,7 +2,7 @@
 
 Japanese current topics become three-dimensional wireframe enemies. Fly between two mirrored worlds, fire lasers and bombs, and break through six monochrome stages.
 
-**v0.11.0 · Installable PWA · PC / mobile · Japanese topics worldwide**
+**v0.11.2 · Installable PWA · PC / mobile · Japanese topics worldwide**
 
 **[PLAY JIJI FIGHTER / ゲームを起動](https://jiji-fighter.pages.dev/)** · [Source code](https://github.com/Masato-Nasu/JIJI-FIGHTER) · [LIVE WORDS API](https://jiji-fighter.pages.dev/api/trends)
 
@@ -30,7 +30,7 @@ Japanese current topics become three-dimensional wireframe enemies. Fly between 
 - A mirrored underside reached by an automatic aircraft roll.
 - Simultaneous lasers and bombs, three hull difficulty settings, stage practice.
 - Aircraft explosion on wall collision or hull depletion.
-- Original music **MAZZ DB 2017**, composed by Masato Nasu.
+- Original looping BGM **MAZZ DB 2017**, composed by Masato Nasu. MUSIC starts when START is tapped; SFX controls effects only.
 - PWA manifest, home-screen icons and offline CLASSIC mode after initial caching.
 
 Ranks are the game's combined order of search terms, social topics and news-derived words, **not a single verified popularity ranking**. Live topic availability depends on the upstream services. TREND requires an internet connection; synthetic sample words are never substituted. Topics remain Japanese regardless of the player's country.
@@ -63,6 +63,12 @@ Sign in to Cloudflare when prompted. If the project does not exist, create `jiji
 For Git integration: build command `node build.mjs`, output directory `dist`, root directory `/`.
 
 The play URL above is the configured Cloudflare Pages address. Availability must be verified after deploying; the GitHub repository itself does not serve the live API.
+
+## BGM / 音楽
+
+The original MP3 plays locally when **START MISSION** is tapped, and loops throughout gameplay. **MUSIC ON / OFF** controls background music. **SFX ON / OFF** is for effects only. If a phone blocks playback, tap **TAP MUSIC** once to retry. Recording mode uses an additional audio track for video capture.
+
+スマホでは **START MISSION** を押すとBGMが始まり、ループ再生されます。音が止まっている場合は **TAP MUSIC** を押してください。SFXは効果音だけの切り替えです。更新が見えない場合は、インストール済みアプリを一度完全に閉じて再度開いてください。
 
 ## Install / ホーム画面に追加
 
