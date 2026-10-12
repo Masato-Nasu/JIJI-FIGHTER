@@ -45,6 +45,7 @@ export async function handleRecordingExport(req,res,origin){
     await run('ffmpeg',['-hide_banner','-nostdin','-loglevel','error','-y',
       '-i',input,'-map','0:v:0','-map','0:a:0',
       '-c:v','libx264','-preset','ultrafast','-crf','24',
+      '-vf','pad=ceil(iw/2)*2:ceil(ih/2)*2',
       '-pix_fmt','yuv420p','-r','30',
       '-c:a','aac','-profile:a','aac_low','-b:a','128k','-ar','44100','-ac','2',
       '-movflags','+faststart',output]);
