@@ -22,9 +22,26 @@ if(chosenType&&desktop){
   console.info('JIJI MP4: native recorder available',chosenType);
 }
 const originalClick=HTMLAnchorElement.prototype.click,createURL=URL.createObjectURL.bind(URL);
-let active=false,mp4File=null,dialog=null,ffmpeg=null,sourceURL=null;
+let active=false,mp4File=null,dialog=null,ffmpeg=null,sourceURL=null,sourceBlob=null;
 // Normal phone recording/sharing is known to work. Limit extra click interception to desktop.
 const approvedDownloads=new WeakSet();
+// The game revokes its source object URL after clicking Download. Retain the
+// actual recorded bytes before that revoke; fetching the URL later can fail,
+// cancel the fallback download, and lose the only copy of the recording.
+const recordedBlobs=new Map();
+if(desktop){
+  const originalObjectURL=URL.createObjectURL.bind(URL);
+  URL.createObjectURL=function(blob){
+    const url=originalObjectURL(blob);
+    if(blob instanceof Blob&&/^video\/(?:webm|mp4)/i.test(blob.type)){
+      recordedBlobs.set(url,blob);
+      // Guard against abandoned recording URLs without changing game cleanup.
+      setTimeout(()=>recordedBlobs.delete(url),5*60*1000);
+    }
+    return url;
+  };
+}
+
 
 function ui(message){if(!dialog){dialog=document.createElement('section');dialog.id='jiji-mp4-share';dialog.style.cssText='position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:2147483647;background:#090909;color:white;border:1px solid #aaa;padding:12px;min-width:270px;max-width:calc(100vw - 32px);font:13px system-ui;text-align:center';dialog.innerHTML='<p id="jiji-mp4-status"></p><button id="jiji-mp4-close">閉じる</button>';document.body.append(dialog);dialog.querySelector('#jiji-mp4-close').onclick=()=>{dialog.remove();dialog=null;};}dialog.querySelector('#jiji-mp4-status').textContent=message;}
 function save(file){const link=document.createElement('a');link.download=file.name;link.href=createURL(file);approvedDownloads.add(link);document.body.appendChild(link);try{originalClick.call(link);}finally{link.remove();}setTimeout(()=>URL.revokeObjectURL(link.href),60000);}
@@ -86,12 +103,17 @@ function compatible(x){return x.mp4&&x.h264&&x.aac&&!x.opus;}
 function filename(){return 'JIJI-FIGHTER-'+new Date().toISOString().replace(/[:.]/g,'-')+'.mp4';}
 async function convert(url,downloadName){
  if(active)return;
- active=true;sourceURL=url;
+ active=true;sourceURL=url;sourceBlob=recordedBlobs.get(url)||null;
  try{
    ui('保存動画の映像・音声コーデックを確認しています…');
-   const response=await fetch(url);
-   if(!response.ok)throw Error('録画データ HTTP '+response.status);
-   const source=await response.blob();
+   // Do not depend on a blob: URL remaining valid after the game's click.
+   let source=sourceBlob;
+   if(!source){
+     const response=await fetch(url);
+     if(!response.ok)throw Error('録画データ HTTP '+response.status);
+     source=await response.blob();
+   }
+   sourceBlob=source;
    if(source.size<1024)throw Error('録画データが空か不完全です');
    const inputCodec=await codecInfo(source);
    console.info('[JIJI MP4] captured track signatures',inputCodec,'blob type',source.type);
@@ -130,18 +152,23 @@ async function convert(url,downloadName){
    console.error('JIJI compatible MP4 export failed',e);
    // Never lose the video: an unconverted backup saves automatically.
    // Its extension stays .webm if that is what the recorder produced.
-   const fallbackName=/\.(?:mp4|webm)$/i.test(downloadName||'')?downloadName:
-     'JIJI-FIGHTER-original.webm';
-   ui('PC用MP4変換に失敗しました: '+problem(e)+'。元の録画を自動保存しました。Linux変換ツールでH.264/AACのMP4にできます。');
-   try{
-     const link=document.createElement('a');
-     link.download=fallbackName;link.href=sourceURL;
-     approvedDownloads.add(link);
-     document.body.appendChild(link);
-     try{originalClick.call(link);}finally{link.remove();}
-   }catch(downloadError){console.error('Recording backup failed',downloadError);}
+   const ext=/^video\/mp4/i.test(sourceBlob?.type||'')?'mp4':'webm';
+   const fallbackName=(downloadName||'JIJI-FIGHTER-original.webm').replace(/\.(?:webm|mp4)$/i,'')+'-ORIGINAL.'+ext;
+   if(sourceBlob&&sourceBlob.size>=1024){
+     try{
+       // Save a new object URL created from retained bytes; sourceURL may
+       // already be revoked by the original game's download handler.
+       save(new File([sourceBlob],fallbackName,{type:sourceBlob.type||'video/webm'}));
+       ui('PCでのMP4変換が完了しませんでした: '+problem(e)+'。元の録画 '+fallbackName+' は保存しました。Linuxでは scripts/convert-recording-linux.sh でH.264/AACに変換できます。');
+     }catch(downloadError){
+       ui('録画バックアップの保存にも失敗: '+problem(downloadError));
+       console.error('Recording backup failed',downloadError);
+     }
+   }else{
+     ui('録画の保存に失敗: '+problem(e)+'。録画データを確保できませんでした。');
+   }
 
- }finally{active=false;}
+ }finally{recordedBlobs.delete(url);sourceBlob=null;active=false;}
 }
 HTMLAnchorElement.prototype.click=function(){
  const name=this.download||'';
