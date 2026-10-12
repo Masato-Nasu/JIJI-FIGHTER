@@ -66,3 +66,19 @@ jobs:
           except Exception:
               print('PUBLISHED API NON-JSON BODY:',body[:600].decode('utf-8','replace'))
           PY
+      - name: Inspect actual built client fetch path
+        run: |
+          node build.mjs
+          python3 - <<'PY'
+          from pathlib import Path
+          html=Path('dist/index.html').read_text()
+          for needle in ['async function provider(', 'async function refresh(', 'function provider(', 'api/trends', 'trendReady', 'LIVE取得失敗', 'NO_LIVE_WORDS', 'const ready', 'window.JIJI_FIGHTER']:
+              print('=== SEARCH',needle,'===')
+              start=0
+              for n in range(3):
+                  at=html.find(needle,start)
+                  if at<0:break
+                  print('BYTE OFFSET',at)
+                  print(html[max(0,at-330):min(len(html),at+2500)])
+                  start=at+len(needle)
+          PY
