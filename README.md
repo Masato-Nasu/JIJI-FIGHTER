@@ -4,7 +4,13 @@ Japanese current topics become three-dimensional wireframe enemies. Fly between 
 
 **v0.11.0 · Installable PWA · PC / mobile · Japanese topics worldwide**
 
-![Japanese live topics — game canvas render](docs/japanese-topics.png)
+**[PLAY JIJI FIGHTER / ゲームを起動](https://jiji-fighter.pages.dev/)** · [Source code](https://github.com/Masato-Nasu/JIJI-FIGHTER) · [LIVE WORDS API](https://jiji-fighter.pages.dev/api/trends)
+
+*The public play link requires a successfully deployed Cloudflare Pages site; GitHub alone does not host the live-topic API.*
+
+![Multiple Japanese 3D word enemies in one game scene](docs/japanese-topics.png)
+
+*Gameplay Canvas capture with multiple demo Japanese words for visual clarity. The screenshot is staged for documentation; actual TREND play uses live feeds and does not substitute sample words.*
 
 ## Game screens
 
@@ -56,7 +62,7 @@ Sign in to Cloudflare when prompted. If the project does not exist, create `jiji
 
 For Git integration: build command `node build.mjs`, output directory `dist`, root directory `/`.
 
-No live deployment URL is claimed here until deployment has succeeded.
+The play URL above is the configured Cloudflare Pages address. Availability must be verified after deploying; the GitHub repository itself does not serve the live API.
 
 ## Install / ホーム画面に追加
 
@@ -80,4 +86,4 @@ Game and original music: **Masato Nasu**. Music: [MAZZ DB 2017](https://soundclo
 
 The game bundles **opentype.js** (MIT) and **Noto Sans JP** (SIL Open Font License). Existing embedded attribution is retained. No blanket open-source license is granted for the game or music by this repository.
 
-The image above is a render from the game's Canvas code, not a screenshot of the full browser UI.
+Documentation images are captured from the game's Canvas; the lead image is a staged demo of multiple word enemies rather than a claim about the live ranking at the moment of capture.
