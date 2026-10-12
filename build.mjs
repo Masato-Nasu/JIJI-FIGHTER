@@ -206,3 +206,67 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
   await writeControls(output,game,'utf8');
   console.log('STOP button, death music stop, SFX default ON and reduced volume enabled.');
 }
+
+
+// RECORD_AUDIO_AND_DEATH_FADE_V2
+// Preserve sound throughout the blast and retain the audio track for repeat recordings.
+{
+ const fs=await import('node:fs/promises');
+ const file=new URL('./dist/index.html',import.meta.url);
+ let h=await fs.readFile(file,'utf8');
+ function sub(a,b,label){
+   const n=h.split(a).length-1;
+   if(n!==1)throw Error('Recording/death patch drift '+label+': '+n);
+   h=h.replace(a,b);
+ }
+ sub("sound(65,.85,'sawtooth',.14);sound(145,.3,'square',.08);hud();\n    window.dispatchEvent(new Event('jiji:musicstop'));",
+     "sound(65,.85,'sawtooth',.14);sound(145,.3,'square',.08);hud();\n    // Continue music through the explosion animation.",
+     'do not silence at impact');
+ sub("els.over.classList.remove('hidden');sound(110,.6,'sawtooth',.08);\n    window.dispatchEvent(new Event('jiji:musicstop'));",
+     "els.over.classList.remove('hidden');sound(110,.6,'sawtooth',.08);\n    window.dispatchEvent(new Event('jiji:deathsceneend'));",
+     'start the musical tail after the blast');
+ sub("if(stream)for(const track of stream.getTracks())track.stop();",
+     "if(stream){\n      for(const track of stream.getVideoTracks())track.stop();\n      for(const track of stream.getAudioTracks())stream.removeTrack(track);\n    }",
+     'keep the WebAudio destination alive across recordings');
+ sub("if(!over.classList.contains('hidden')&&recorder?.state==='recording')recorder.stop();",
+     "// jiji:deathsceneend handles final saving, after the music tail.",
+     'do not truncate the recording when GAME OVER appears');
+ const fade=[
+   "  let endingToken=0;",
+   "  const pendingEnds=[];",
+   "  function cancelEnding(){endingToken++;while(pendingEnds.length)clearTimeout(pendingEnds.pop());}",
+   "  function after(ms,fn){pendingEnds.push(setTimeout(fn,ms));}",
+   "  window.addEventListener('jiji:deathsceneend',()=>{",
+   "    cancelEnding();",
+   "    const token=endingToken,before=audio.volume;",
+   "    // Show the full blast first, then 800ms tail and 650ms fade.",
+   "    after(800,()=>{",
+   "      for(let step=1;step<=13;step++)after(step*50,()=>{",
+   "        if(token!==endingToken)return;",
+   "        audio.volume=Math.max(0,before*(1-step/13));",
+   "        if(step===13){",
+   "          stopMusicForMission();audio.volume=.28;",
+   "          after(180,()=>{",
+   "            if(token!==endingToken)return;",
+   "            if(recorder?.state==='recording')recorder.stop();",
+   "          });",
+   "        }",
+   "      });",
+   "    });",
+   "  });",
+   "  window.addEventListener('jiji:musicstop',()=>{cancelEnding();stopMusicForMission();});"
+ ].join('\n');
+ sub("  window.addEventListener('jiji:musicstop',stopMusicForMission);",fade,
+     'fade BGM after explosion and then save recording');
+ sub("    stopMusicForMission();\n    if(recorder?.state==='recording')recorder.stop();",
+     "    cancelEnding();stopMusicForMission();\n    if(recorder?.state==='recording')recorder.stop();",
+     'STOP GAME still stops immediately');
+ sub("    audio.muted=false;audio.volume=.28;audio.loop=true;",
+     "    cancelEnding();audio.muted=false;audio.volume=.28;audio.loop=true;",
+     'cancel delayed fades when restarting music');
+ sub("if(musicOn && stream.getAudioTracks().length!==1){",
+     "if(musicOn && (stream.getAudioTracks().length!==1||stream.getAudioTracks()[0].readyState!=='live')){",
+     'never silently record with a stopped audio track');
+ await fs.writeFile(file,h,'utf8');
+ console.log('Recorded audio survives multiple sessions; BGM fades after blast + 0.8s tail.');
+}
