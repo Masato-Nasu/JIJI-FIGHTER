@@ -58,6 +58,8 @@ try{
         const e=g.debugTrend(names[i],i+8,x,y,z);
         e.fire=999;
       }
+      g.debugSetHull?.(100);
+      document.getElementById('systemMessage')?.classList.remove('visible');
       g.debugRender?.();
     });
   }else{
