@@ -375,3 +375,20 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
   }
   console.log('Built JIJI FIGHTER with display version V. 0.11.6');
 }
+
+
+// MP4 / X sharing bridge, loaded before game scripts to capture recorder downloads.
+{
+ const fs=await import('node:fs/promises');
+ await fs.copyFile(new URL('./mp4-share.js',import.meta.url),new URL('./dist/mp4-share.js',import.meta.url));
+ const htmlPath=new URL('./dist/index.html',import.meta.url);
+ let html=await fs.readFile(htmlPath,'utf8');
+ if(!html.includes('src="mp4-share.js"')){
+   const script='<script src="./mp4-share.js"></script>';
+   if(html.includes('</head>'))html=html.replace('</head>',script+'\n</head>');
+   else if(html.includes('<body'))html=html.replace('<body',script+'\n<body');
+   else throw new Error('Cannot find MP4 script injection location');
+   await fs.writeFile(htmlPath,html,'utf8');
+ }
+ console.log('MP4 recording conversion and X sharing bridge included.');
+}
