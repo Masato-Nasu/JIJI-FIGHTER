@@ -1,213 +1,152 @@
-/* MP4 export bridge for JIJI FIGHTER — converts recorded WebM to H.264/AAC MP4 */
+/* Desktop video exporter: local Linux FFmpeg, never browser WebAssembly.
+ * Phone path is untouched. On desktop keep a manual original-video download
+ * available even when conversion, automatic downloads, or APIs fail. */
 (()=>{
 'use strict';
-if(window.__jijiMp4Bridge)return;window.__jijiMp4Bridge=true;console.info('JIJI desktop MP4: verify real ISO BMFF codec entries before saving');
-// Prefer native H.264/AAC MP4 capture where the browser actually supports it.
-// Preserve the constructor API and avoid FFmpeg initialization on those browsers.
-const NativeRecorder=window.MediaRecorder;
+if(window.__jijiMp4Bridge)return;
+window.__jijiMp4Bridge=true;
 const desktop=!/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-// A bare MP4 MIME type can still contain Opus audio. X requires AAC.
-// Only bypass conversion when both H.264 video and AAC audio are advertised.
-const nativeTypes=['video/mp4;codecs="avc1.42E01E,mp4a.40.2"'];
-const chosenType=nativeTypes.find(t=>NativeRecorder?.isTypeSupported?.(t));
-if(chosenType&&desktop){
-  window.MediaRecorder=new Proxy(NativeRecorder,{
-    construct(target,args,newTarget){
-      const options={...(args[1]||{}),mimeType:chosenType};
-      try{return Reflect.construct(target,[args[0],options],target);}
-      catch(e){console.warn('Native MP4 recorder rejected, falling back to original',e);return Reflect.construct(target,args,target);}
-    },
-    get(target,key){if(key==='isTypeSupported')return target.isTypeSupported.bind(target);return Reflect.get(target,key,target);}
-  });
-  console.info('JIJI MP4: native recorder available',chosenType);
-}
-const originalClick=HTMLAnchorElement.prototype.click,createURL=URL.createObjectURL.bind(URL);
-let active=false,mp4File=null,dialog=null,ffmpeg=null,sourceURL=null,sourceBlob=null;
-// Normal phone recording/sharing is known to work. Limit extra click interception to desktop.
-const approvedDownloads=new WeakSet();
-// The game revokes its source object URL after clicking Download. Retain the
-// actual recorded bytes before that revoke; fetching the URL later can fail,
-// cancel the fallback download, and lose the only copy of the recording.
-const recordedBlobs=new Map();
-if(desktop){
-  const originalObjectURL=URL.createObjectURL.bind(URL);
-  URL.createObjectURL=function(blob){
-    const url=originalObjectURL(blob);
-    if(blob instanceof Blob&&/^video\/(?:webm|mp4)/i.test(blob.type)){
-      recordedBlobs.set(url,blob);
-      // Guard against abandoned recording URLs without changing game cleanup.
-      setTimeout(()=>recordedBlobs.delete(url),5*60*1000);
-    }
-    return url;
-  };
-}
+if(!desktop)return;
 
-
-function ui(message){if(!dialog){dialog=document.createElement('section');dialog.id='jiji-mp4-share';dialog.style.cssText='position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:2147483647;background:#090909;color:white;border:1px solid #aaa;padding:12px;min-width:270px;max-width:calc(100vw - 32px);font:13px system-ui;text-align:center';dialog.innerHTML='<p id="jiji-mp4-status"></p><button id="jiji-mp4-close">閉じる</button>';document.body.append(dialog);dialog.querySelector('#jiji-mp4-close').onclick=()=>{dialog.remove();dialog=null;};}dialog.querySelector('#jiji-mp4-status').textContent=message;}
-function save(file){const link=document.createElement('a');link.download=file.name;link.href=createURL(file);approvedDownloads.add(link);document.body.appendChild(link);try{originalClick.call(link);}finally{link.remove();}setTimeout(()=>URL.revokeObjectURL(link.href),60000);}
-function problem(e){return e instanceof Error?e.message:(e?.message||e?.type||e?.name||String(e||'不明なエラー'));}
-function deadline(promise,ms,label){let timer;return Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error(label+'が'+Math.ceil(ms/1000)+'秒以内に完了しませんでした。通信・ブラウザ制限を確認してください')),ms);})]).finally(()=>clearTimeout(timer));}
-async function blobUrl(url,type,label){ui('MP4エンジン: '+label+' を取得中…');const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),60000);try{const response=await fetch(url,{signal:controller.signal,cache:'force-cache'});if(!response.ok)throw Error(label+' HTTP '+response.status);return createURL(new Blob([await response.arrayBuffer()],{type}));}catch(e){throw Error(label+' の取得に失敗: '+problem(e));}finally{clearTimeout(timer);}}
-async function engine(){
- if(ffmpeg)return ffmpeg;
- const root='https://cdn.jsdelivr.net/npm/';
- const lib=await blobUrl(root+'@ffmpeg/ffmpeg@0.12.6/dist/umd/ffmpeg.js','text/javascript','本体');
- ui('MP4エンジン: スクリプトを起動中…');
- await deadline(new Promise((ok,bad)=>{const tag=document.createElement('script');tag.src=lib;tag.onload=ok;tag.onerror=()=>bad(Error('FFmpeg本体スクリプトが実行できません'));document.head.append(tag);}),15000,'スクリプト起動');
- const worker=await blobUrl(root+'@ffmpeg/ffmpeg@0.12.6/dist/umd/814.ffmpeg.js','text/javascript','Worker');
- const core=root+'@ffmpeg/core@0.12.6/dist/umd/';
- const coreURL=await blobUrl(core+'ffmpeg-core.js','text/javascript','コア');
- const wasmURL=await blobUrl(core+'ffmpeg-core.wasm','application/wasm','WASM');
- if(!window.FFmpegWASM?.FFmpeg)throw Error('FFmpegクラスが見つかりません');
- const f=new window.FFmpegWASM.FFmpeg();
- f.on('log',({message})=>console.debug('[MP4]',message));
- ui('MP4エンジン: Worker・WASMを初期化中…');
- // FFmpeg's wrapper can leave load() pending after an uncaught worker error.
- // Surface worker errors in browser and CI logs rather than only timing out.
- const RealWorker=window.Worker;
- window.Worker=class extends RealWorker{
-   constructor(url,options){
-     super(url,options);
-     console.info('[JIJI MP4 worker] started',options?.type||'classic');
-     this.addEventListener('error',event=>console.error('[JIJI MP4 worker] uncaught',event.message,event.filename,event.lineno));
-     this.addEventListener('messageerror',event=>console.error('[JIJI MP4 worker] messageerror',event.type));
-     this.addEventListener('message',event=>{
-       if(event.data?.type==='ERROR')console.error('[JIJI MP4 worker] load/encode error',String(event.data?.data));
-       else if(event.data?.type==='LOAD')console.info('[JIJI MP4 worker] FFmpeg core loaded');
-     });
-   }
- };
- let loading;
- try{loading=f.load({classWorkerURL:worker,coreURL,wasmURL});}
- finally{window.Worker=RealWorker;}
- await deadline(loading,90000,'Worker・WASM初期化');
- ffmpeg=f;return f;
+const NativeRecorder=window.MediaRecorder;
+const nativeTypes=['video/mp4;codecs="avc1.42E01E,mp4a.40.2"','video/mp4;codecs="avc1.4D401E,mp4a.40.2"'];
+const nativeType=nativeTypes.find(t=>NativeRecorder?.isTypeSupported?.(t));
+if(nativeType){
+ window.MediaRecorder=new Proxy(NativeRecorder,{
+  construct(target,args){
+   try{return Reflect.construct(target,[args[0],{...(args[1]||{}),mimeType:nativeType}],target);}
+   catch(e){console.warn('[JIJI MP4] Native encoder declined format',e);return Reflect.construct(target,args,target);}
+  },
+  get(target,key){if(key==='isTypeSupported')return target.isTypeSupported.bind(target);return Reflect.get(target,key,target);}
+ });
 }
-
+const originalClick=HTMLAnchorElement.prototype.click;
+const createURL=URL.createObjectURL.bind(URL);
+const approved=new WeakSet(),sourceBlobs=new Map();
+const originalURL=URL.createObjectURL.bind(URL);
+URL.createObjectURL=function(data){
+ const url=originalURL(data);
+ if(data instanceof Blob&&/^video\/(?:webm|mp4)/i.test(data.type)){
+  sourceBlobs.set(url,data);
+  setTimeout(()=>sourceBlobs.delete(url),10*60*1000);
+ }
+ return url;
+};
+let active=false,originalFile=null,mp4File=null,dialog=null;
+function save(file){
+ const a=document.createElement('a');
+ a.download=file.name;a.href=createURL(file);
+ approved.add(a);
+ document.body.appendChild(a);
+ try{originalClick.call(a);}finally{a.remove();}
+ setTimeout(()=>URL.revokeObjectURL(a.href),60000);
+}
+function ui(message){
+ if(!dialog||!dialog.isConnected){
+  dialog=document.createElement('section');
+  dialog.id='jiji-mp4-share';
+  dialog.style.cssText='position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:2147483647;background:#090909;color:white;border:1px solid #aaa;padding:12px;min-width:280px;max-width:calc(100vw - 32px);font:13px/1.6 system-ui;text-align:center';
+  dialog.innerHTML='<p id="jiji-mp4-status" role="status"></p><button type="button" id="jiji-save-original" style="margin:4px;padding:8px">元動画を保存</button><button type="button" id="jiji-save-mp4" style="margin:4px;padding:8px">MP4を保存</button><button type="button" id="jiji-mp4-close" style="margin:4px;padding:8px">閉じる</button>';
+  document.body.appendChild(dialog);
+  dialog.querySelector('#jiji-save-original').onclick=()=>{if(originalFile)save(originalFile);};
+  dialog.querySelector('#jiji-save-mp4').onclick=()=>{if(mp4File)save(mp4File);};
+  dialog.querySelector('#jiji-mp4-close').onclick=()=>{dialog.remove();dialog=null;};
+ }
+ dialog.querySelector('#jiji-mp4-status').textContent=message;
+ dialog.querySelector('#jiji-save-original').hidden=!originalFile;
+ dialog.querySelector('#jiji-save-mp4').hidden=!mp4File;
+}
+function problem(e){return String(e?.message||e||'不明なエラー');}
 async function codecInfo(blob){
- // Examine actual MP4 sample-description entries (stsd). Searching for
- // 'mp4a' as plain text may mistake metadata for an AAC sound track.
- const head=await blob.slice(0,Math.min(blob.size,5*1024*1024)).arrayBuffer();
- const header=new Uint8Array(head);
- const mp4=header.length>=12&&String.fromCharCode(...header.subarray(4,8))==='ftyp';
- if(!mp4)return {mp4:false,h264:false,aac:false,opus:false,tracks:[]};
- const chunks=[header];
- if(blob.size>header.byteLength){
-   const tailStart=Math.max(header.byteLength,blob.size-5*1024*1024);
-   chunks.push(new Uint8Array(await blob.slice(tailStart).arrayBuffer()));
- }
- const tracks=[];
+ const head=new Uint8Array(await blob.slice(0,Math.min(blob.size,5*1024*1024)).arrayBuffer());
+ const signature=head.length>=12&&String.fromCharCode(...head.subarray(4,8))==='ftyp';
+ if(!signature)return {mp4:false,h264:false,aac:false};
+ const chunks=[head];
+ if(blob.size>head.byteLength)chunks.push(new Uint8Array(await blob.slice(Math.max(head.byteLength,blob.size-5*1024*1024)).arrayBuffer()));
+ const entries=[];
  for(const bytes of chunks){
-   const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
-   for(let i=4;i+20<=bytes.length;i++){
-     if(bytes[i]!==115||bytes[i+1]!==116||bytes[i+2]!==115||bytes[i+3]!==100)continue;
-     const boxSize=view.getUint32(i-4);
-     if(boxSize<24||i-4+boxSize>bytes.length)continue;
-     const count=view.getUint32(i+8);
-     if(count<1||count>50)continue;
-     let entry=i+12;
-     for(let k=0;k<count&&entry+8<=Math.min(bytes.length,i-4+boxSize);k++){
-       const size=view.getUint32(entry);
-       if(size<8||entry+size>i-4+boxSize)break;
-       tracks.push(String.fromCharCode(...bytes.subarray(entry+4,entry+8)));
-       entry+=size;
-     }
+  const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
+  for(let i=4;i+20<=bytes.length;i++){
+   if(bytes[i]!==115||bytes[i+1]!==116||bytes[i+2]!==115||bytes[i+3]!==100)continue;
+   const size=view.getUint32(i-4),count=view.getUint32(i+8);
+   if(size<24||i-4+size>bytes.length||count<1||count>50)continue;
+   let start=i+12;
+   for(let k=0;k<count&&start+8<=i-4+size;k++){
+    const n=view.getUint32(start);
+    if(n<8||start+n>i-4+size)break;
+    entries.push(String.fromCharCode(...bytes.subarray(start+4,start+8)));
+    start+=n;
    }
+  }
  }
- return {mp4:true,h264:tracks.includes('avc1')||tracks.includes('avc3'),
-   aac:tracks.includes('mp4a'),opus:tracks.includes('Opus')||tracks.includes('opus'),tracks};
+ return {mp4:true,h264:entries.includes('avc1')||entries.includes('avc3'),aac:entries.includes('mp4a'),entries};
 }
-function compatible(x){return x.mp4&&x.h264&&x.aac&&!x.opus;}
-function filename(){return 'JIJI-FIGHTER-'+new Date().toISOString().replace(/[:.]/g,'-')+'.mp4';}
-async function convert(url,downloadName){
- if(active)return;
- active=true;sourceURL=url;sourceBlob=recordedBlobs.get(url)||null;
+function stamp(){return 'JIJI-FIGHTER-'+new Date().toISOString().replace(/[:.]/g,'-');}
+async function convert(url,name){
+ if(active){ui('すでに別の録画を処理中です。元動画を保存できます。');return;}
+ active=true;mp4File=null;
  try{
-   ui('保存動画の映像・音声コーデックを確認しています…');
-   // Do not depend on a blob: URL remaining valid after the game's click.
-   let source=sourceBlob;
-   if(!source){
-     const response=await fetch(url);
-     if(!response.ok)throw Error('録画データ HTTP '+response.status);
-     source=await response.blob();
-   }
-   sourceBlob=source;
-   if(source.size<1024)throw Error('録画データが空か不完全です');
-   const inputCodec=await codecInfo(source);
-   console.info('[JIJI MP4] captured track signatures',inputCodec,'blob type',source.type);
-   if(compatible(inputCodec)){
-     mp4File=new File([source],filename(),{type:'video/mp4'});
-     ui('H.264映像＋AAC音声を確認。MP4を保存します。');
-     save(mp4File);
-     return;
-   }
-
-   // Even if the browser gave an MP4 container, it may contain Opus audio.
-   // Never pass that through to X/phone galleries as a supposedly compatible MP4.
-   const ff=await engine();
-   const input=inputCodec.mp4?'input.mp4':'input.webm';
-   const bytes=new Uint8Array(await source.arrayBuffer());
-   await deadline(ff.writeFile(input,bytes),20000,'録画読み込み');
-   ui('互換形式 H.264映像＋AAC音声へ変換しています…');
-   const args=['-y','-i',input,'-map','0:v:0','-map','0:a:0',
-     '-c:v',inputCodec.h264?'copy':'libx264'];
-   if(!inputCodec.h264)args.push('-preset','ultrafast','-pix_fmt','yuv420p');
-   args.push('-c:a','aac','-b:a','128k','-ar','44100','-movflags','+faststart','output.mp4');
-   const code=await deadline(ff.exec(args),300000,'H.264/AAC変換');
-   if(code!==0)throw Error('変換エンジン終了コード '+code+'。動画・音声が正常に記録されたか確認してください');
-   const result=await ff.readFile('output.mp4');
-   if(result.byteLength<1024)throw Error('変換後の動画が空です');
-   const converted=new Blob([result],{type:'video/mp4'});
-   const outputCodec=await codecInfo(converted);
-   console.info('[JIJI MP4] encoded track signatures',outputCodec);
-   if(!compatible(outputCodec))throw Error('変換後もH.264/AAC音声を確認できなかったため、互換性のないMP4は保存しません');
-   mp4File=new File([converted],filename(),{type:'video/mp4'});
-   ui('H.264/AACの確認完了。MP4を保存します。');
+  let source=sourceBlobs.get(url);
+  if(!source){const response=await fetch(url);if(!response.ok)throw Error('録画の読み込み失敗');source=await response.blob();}
+  if(source.size<1024)throw Error('録画データが空です');
+  const originalExt=/^video\/mp4/i.test(source.type)?'mp4':'webm';
+  originalFile=new File([source],stamp()+'-ORIGINAL.'+originalExt,{type:source.type||'video/webm'});
+  ui('録画データを確保しました。「元動画を保存」はいつでも押せます。MP4を準備中…');
+  const info=await codecInfo(source);
+  if(info.mp4&&info.h264&&info.aac){
+   mp4File=new File([source],stamp()+'.mp4',{type:'video/mp4'});
    save(mp4File);
-   await ff.deleteFile(input).catch(()=>{});
-   await ff.deleteFile('output.mp4').catch(()=>{});
+   ui('H.264映像＋AAC音声のMP4を保存しました。見つからない場合は「MP4を保存」を押してください。');
+   return;
+  }
+  // The desktop Linux server runs OS FFmpeg. No fragile ffmpeg.wasm worker.
+  // On a Cloudflare-hosted copy this endpoint is intentionally unavailable;
+  // in that case we immediately save the original recording.
+  ui('元動画を確保しました。LinuxのFFmpegでH.264/AACへ変換中…');
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),120000);
+  let response;
+  try{
+   response=await fetch('/api/export-mp4',{
+    method:'POST',headers:{'Content-Type':source.type||'application/octet-stream'},
+    body:source,signal:controller.signal,cache:'no-store'
+   });
+  }finally{clearTimeout(timer);}
+  if(!response.ok){
+   let detail='';
+   try{detail=(await response.json()).error||'';}catch{}
+   throw Error(response.status===404||response.status===405?'PCローカルサーバーで起動してください（bash start-linux.sh）':detail||'MP4変換サーバー HTTP '+response.status);
+  }
+  const converted=await response.blob();
+  const checked=await codecInfo(converted);
+  if(!checked.mp4||!checked.h264||!checked.aac)throw Error('H.264/AACを検証できませんでした');
+  mp4File=new File([converted],stamp()+'.mp4',{type:'video/mp4'});
+  save(mp4File);
+  ui('MP4変換成功。H.264映像＋AAC音声で保存しました。見つからない場合は「MP4を保存」を押してください。');
  }catch(e){
-   console.error('JIJI compatible MP4 export failed',e);
-   // Never lose the video: an unconverted backup saves automatically.
-   // Its extension stays .webm if that is what the recorder produced.
-   const ext=/^video\/mp4/i.test(sourceBlob?.type||'')?'mp4':'webm';
-   const fallbackName=(downloadName||'JIJI-FIGHTER-original.webm').replace(/\.(?:webm|mp4)$/i,'')+'-ORIGINAL.'+ext;
-   if(sourceBlob&&sourceBlob.size>=1024){
-     try{
-       // Save a new object URL created from retained bytes; sourceURL may
-       // already be revoked by the original game's download handler.
-       save(new File([sourceBlob],fallbackName,{type:sourceBlob.type||'video/webm'}));
-       ui('PCでのMP4変換が完了しませんでした: '+problem(e)+'。元の録画 '+fallbackName+' は保存しました。Linuxでは scripts/convert-recording-linux.sh でH.264/AACに変換できます。');
-     }catch(downloadError){
-       ui('録画バックアップの保存にも失敗: '+problem(downloadError));
-       console.error('Recording backup failed',downloadError);
-     }
-   }else{
-     ui('録画の保存に失敗: '+problem(e)+'。録画データを確保できませんでした。');
-   }
-
- }finally{recordedBlobs.delete(url);sourceBlob=null;active=false;}
+  console.error('[JIJI desktop export]',e);
+  if(originalFile){
+   try{save(originalFile);}catch(downloadError){console.error('[JIJI backup]',downloadError);}
+   ui('MP4変換はできませんでした: '+problem(e)+'。元動画の保存を試みました。ダウンロードにない場合は「元動画を保存」を押してください。');
+  }else ui('動画を取り出せませんでした: '+problem(e));
+ }finally{
+  sourceBlobs.delete(url);
+  active=false;
+ }
 }
 HTMLAnchorElement.prototype.click=function(){
  const name=this.download||'';
- // Intercept BOTH mp4 and webm. Native mp4 can contain unsupported Opus audio.
- if(desktop&&!approvedDownloads.has(this)&&this.href.startsWith('blob:')&&/\.(?:webm|mp4)$/i.test(name)){
-   void convert(this.href,name);
-   return;
+ if(!approved.has(this)&&this.href.startsWith('blob:')&&/\.(?:mp4|webm)$/i.test(name)){
+  void convert(this.href,name);return;
  }
  return originalClick.call(this);
 };
-// Some PC recording paths use a real <a download> click rather than .click().
-// Capture them before they can save an unchecked WebM/MP4 to disk.
-// Leave touch/mobile download behavior unchanged.
-if(desktop)document.addEventListener('click',event=>{
+document.addEventListener('click',event=>{
  const a=event.target?.closest?.('a[download]');
- if(!a||approvedDownloads.has(a))return;
- const name=a.download||'';
- if(a.href.startsWith('blob:')&&/\.(?:webm|mp4)$/i.test(name)){
-   event.preventDefault();
-   event.stopImmediatePropagation();
-   void convert(a.href,name);
+ if(!a||approved.has(a))return;
+ if(a.href.startsWith('blob:')&&/\.(?:mp4|webm)$/i.test(a.download||'')){
+  event.preventDefault();event.stopImmediatePropagation();
+  void convert(a.href,a.download);
  }
 },true);
 })();
