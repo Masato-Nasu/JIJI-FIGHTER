@@ -1,0 +1,42 @@
+name: Test LIVE WORD API
+on:
+  push:
+    paths:
+      - functions/api/trends.js
+      - .github/workflows/trend-api-check.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check API syntax
+        run: node --check functions/api/trends.js
+      - name: Verify a real-feed response can start TREND MODE
+        run: |
+          node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import {onRequestGet} from './functions/api/trends.js';
+          const rss = `<rss><channel><item><title>半導体研究</title><pubDate>${new Date().toUTCString()}</pubDate></item></channel></rss>`;
+          globalThis.fetch = async input => {
+            const url = String(input);
+            if(url.includes('public.api.bsky.app'))return new Response(JSON.stringify({trends:[{displayName:'台風情報'}]}),{status:200});
+            if(url.includes('trends.google.com'))return new Response('<rss><channel><item><title>宇宙開発</title></item></channel></rss>',{status:200});
+            if(url.includes('wikidata.org'))throw new Error('Unexpected slow Wikidata request');
+            if(url.includes('wikipedia.org'))throw new Error('Unexpected Wikipedia fallback');
+            return new Response(rss,{status:200});
+          };
+          const response = await onRequestGet({request:new Request('https://example.org/api/trends')});
+          assert.equal(response.status,200,'Valid upstream topics should return HTTP 200');
+          const body=await response.json();
+          assert.ok(body.items.length>0,'Game must receive nonempty words');
+          assert.ok(body.items.every(x=>x.text&&Number.isInteger(x.rank)));
+          assert.equal(body.sample_count,0,'Never label generated demo terms as live');
+          console.log('PASS: LIVE WORD returns',body.items.length,'validated real-feed words');
+          JS
