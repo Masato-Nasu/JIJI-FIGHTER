@@ -333,7 +333,7 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
     if(count!==1)throw Error('Lethal-hit build drift '+what+': '+count);
     h=h.replace(from,to);
   }
-  single("function damage(amount){\n     if(mode!=='playing'||player.invuln>0)return;",
+  single("function damage(amount){\n    if(mode!=='playing'||player.invuln>0)return;",
     "function damage(amount){\n     if(mode!=='playing'||player.invuln>0)return false;",
     'damage skipped return');
   single("hull=Math.max(0,hull-amount*setting.damage);combo=0;flash=.29;shake=9;",
