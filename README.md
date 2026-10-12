@@ -2,7 +2,7 @@
 
 Japanese current topics become three-dimensional wireframe enemies. Fly between two mirrored worlds, fire lasers and bombs, and break through six monochrome stages.
 
-**v0.11.2 · Installable PWA · PC / mobile · Japanese topics worldwide**
+**v0.11.3 · Installable PWA · PC / mobile · Japanese topics worldwide**
 
 **[PLAY JIJI FIGHTER / ゲームを起動](https://jiji-fighter.pages.dev/)** · [Source code](https://github.com/Masato-Nasu/JIJI-FIGHTER) · [LIVE WORDS API](https://jiji-fighter.pages.dev/api/trends)
 
@@ -66,9 +66,9 @@ The play URL above is the configured Cloudflare Pages address. Availability must
 
 ## BGM / 音楽
 
-The original MP3 plays locally when **START MISSION** is tapped, and loops throughout gameplay. **MUSIC ON / OFF** controls background music. **SFX ON / OFF** is for effects only. If a phone blocks playback, tap **TAP MUSIC** once to retry. Recording mode uses an additional audio track for video capture.
+The original MP3 plays locally when **START MISSION** is tapped, and loops throughout gameplay at a reduced 28% volume. **MUSIC ON / OFF** controls background music. Sound effects start **ON** at reduced volume; the **SFX ON / OFF** button controls effects only. **STOP GAME** (next to PAUSE) exits the mission and returns to the title. Music stops immediately on a fatal hit or manual exit, while the explosion animation remains visible. If a phone blocks playback, tap **TAP MUSIC** once to retry. Recording mode uses an additional audio track for video capture.
 
-スマホでは **START MISSION** を押すとBGMが始まり、ループ再生されます。音が止まっている場合は **TAP MUSIC** を押してください。SFXは効果音だけの切り替えです。更新が見えない場合は、インストール済みアプリを一度完全に閉じて再度開いてください。
+スマホでは **START MISSION** を押すとBGMが始まり、控えめな音量でループ再生されます。**SFXは初期ON**で、音量を下げています。**STOP GAME** を押すと開始画面に戻り、音楽も停止します。撃墜時には爆発演出を残してBGMだけ止まります。音が止まっている場合は **TAP MUSIC** を押してください。SFXは効果音だけの切り替えです。更新が見えない場合は、インストール済みアプリを一度完全に閉じて再度開いてください。
 
 ## Install / ホーム画面に追加
 
@@ -83,6 +83,7 @@ After the first complete online load and caching, CLASSIC can launch offline. TR
 | Move | WASD / arrow keys | Drag the left side |
 | Laser + bomb | Hold Space or B | Hold ATTACK |
 | Pause | P / Escape | PAUSE |
+| Stop game / return to title | STOP GAME | STOP GAME |
 
 Cross the mirror plane to enter the other world. Walls destroy the aircraft on every difficulty. Decorative buildings have no collision.
 
