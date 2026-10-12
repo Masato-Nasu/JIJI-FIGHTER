@@ -1,8 +1,9 @@
-name: Validate explosion fix build
+name: Validate game build and BGM
 on:
   push:
     paths:
       - build.mjs
+      - scripts/test-music.mjs
       - sw.js
       - .github/workflows/explosion-build-check.yml
   workflow_dispatch:
@@ -11,13 +12,13 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: Build with restored crash animation
+      - name: Build with original BGM and crash animation
         run: node build.mjs
       - name: Validate patched game and PWA
         run: |
@@ -34,3 +35,9 @@ jobs:
           "
           test -s dist/music/mazz-db-2017.mp3
           test -s dist/manifest.webmanifest
+      - name: Install browser tester
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Play BGM in desktop and mobile browsers
+        run: node scripts/test-music.mjs
