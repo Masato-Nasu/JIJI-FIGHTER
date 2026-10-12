@@ -8,6 +8,7 @@ on:
       - linux-server.mjs
       - start-linux.sh
       - start-linux-chrome.sh
+      - linux-music-recovery.js
       - scripts/test-local-linux-recording.mjs
       - scripts/test-music.mjs
       - scripts/test-recorded-audio.mjs
