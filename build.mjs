@@ -357,3 +357,21 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
   await fs.writeFile(output,h,'utf8');
   console.log('Lethal projectiles and enemy contacts now always enter visible destruction without crashing the frame.');
 }
+
+
+// Display the actual release version in the built game.
+// Keep the game mechanics, audio routing, recording, and all other UI unchanged.
+{
+  const fs = await import('node:fs/promises');
+  const path = new URL('./dist/index.html', import.meta.url);
+  const html = await fs.readFile(path, 'utf8');
+  const oldLabel = '<span class="index">V. 0.9.12</span>';
+  const newLabel = '<span class="index">V. 0.11.6</span>';
+  if (!html.includes(oldLabel) && !html.includes(newLabel)) {
+    throw new Error('Version label mismatch: refusing silent publication');
+  }
+  if (html.includes(oldLabel)) {
+    await fs.writeFile(path, html.replace(oldLabel, newLabel), 'utf8');
+  }
+  console.log('Built JIJI FIGHTER with display version V. 0.11.6');
+}
