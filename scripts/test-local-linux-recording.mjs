@@ -2,6 +2,7 @@ import {spawn,execFileSync} from 'node:child_process';
 import {mkdtemp,readFile,writeFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {chromium} from 'playwright';
 
 const temp=await mkdtemp(join(tmpdir(),'jiji-linux-smoke-'));
 const recording=join(temp,'input.webm'),output=join(temp,'output.mp4');
@@ -29,6 +30,40 @@ try{
  const body=await js.text();
  if(!body.includes('/api/export-mp4')||!body.includes('元動画を保存')||body.includes('Worker・WASMを初期化中'))
   throw Error('Wrong/old video exporter served by local Linux server');
+ // Real Linux server must support byte-range MP3 requests from Chrome.
+ const musicRange=await fetch(address+'/music/mazz-db-2017.mp3',{headers:{Range:'bytes=0-1023'}});
+ if(musicRange.status!==206)throw Error('Chrome MP3 range should return HTTP 206; got '+musicRange.status);
+ if(musicRange.headers.get('content-range')?.startsWith('bytes 0-1023/')!==true)
+  throw Error('MP3 Content-Range invalid '+musicRange.headers.get('content-range'));
+ const audioChunk=await musicRange.arrayBuffer();
+ if(audioChunk.byteLength!==1024)throw Error('MP3 partial response length '+audioChunk.byteLength);
+ const browser=await chromium.launch({headless:true,args:['--no-sandbox','--autoplay-policy=no-user-gesture-required']});
+ try{
+  const page=await browser.newPage();
+  const errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  await page.goto(address+'/',{waitUntil:'domcontentloaded'});
+  await page.locator('#classicMode').click();
+  await page.locator('#startButton').waitFor({state:'visible'});
+  await page.waitForFunction(()=>!document.querySelector('#startButton').disabled,null,{timeout:28000});
+  await page.locator('#startButton').click();
+  try{
+   await page.waitForFunction(()=>document.querySelector('#bgm')?.currentTime>.35,null,{timeout:18000});
+  }catch(e){
+   const state=await page.evaluate(()=>{
+    const audio=document.querySelector('#bgm');
+    return {src:audio?.currentSrc,code:audio?.error?.code,message:audio?.error?.message,
+      networkState:audio?.networkState,readyState:audio?.readyState,paused:audio?.paused,
+      label:document.querySelector('#musicToggle')?.textContent};
+   });
+   throw Error('Real Linux server BGM playback failed: '+JSON.stringify(state)+' pageErrors='+errors.slice(0,3).join(';')+' '+e.message);
+  }
+  const result=await page.evaluate(()=>({label:document.querySelector('#musicToggle')?.textContent,
+   muted:document.querySelector('#bgm')?.muted,paused:document.querySelector('#bgm')?.paused}));
+  if(result.paused||result.muted||result.label?.includes('ERROR'))throw Error('Music broken: '+JSON.stringify(result));
+  console.log('REAL LOCAL LINUX BGM OK, audio/MPEG HTTP 206, native Chrome playback');
+  await page.close();
+ }finally{await browser.close();}
  const response=await fetch(address+'/api/export-mp4');
  if(response.status!==405)throw Error('Local FFmpeg API GET unexpectedly returned HTTP '+response.status);
  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-y',
