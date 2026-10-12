@@ -217,8 +217,23 @@ async function buildFeed(){
   const extras=settled.slice(4).filter(e=>e.status==='fulfilled').map(e=>e.value);
   const extraWords=[...new Set(extras.flatMap(e=>e.words))];
   const metadata=await findPeople([...g,...b,...gn.words,...yn.words,...extraWords]);
-  const combined=mixFeeds(g,b,gn.words,yn.words,metadata.people,metadata.known,metadata.nonpeople,extraWords);
+  let combined=mixFeeds(g,b,gn.words,yn.words,metadata.people,metadata.known,metadata.nonpeople,extraWords);
+  // If every live RSS/social provider fails, use actual (dated) Japanese
+  // Wikipedia page-view rankings rather than pretending samples are live.
+  let wikipediaFallback=null;
+  if(!combined.items.length){
+    try{
+      const wiki=await wikipedia();
+      const topics=wiki.words.filter(word=>clearTopic(word)||TOPIC_HINT.test(word));
+      const fallbackWords=topics.length?topics:wiki.words.filter(word=>!PERSON_END.test(word)&&!(/^[\\p{Script=Han}]{2,4}$/u.test(word)));
+      if(fallbackWords.length){
+        wikipediaFallback={ok:true,date:wiki.date,count:Math.min(fallbackWords.length,150),source:'dated-pageviews-not-live-trends'};
+        combined={...combined,items:fallbackWords.slice(0,150).map((text,i)=>({text,rank:i+1,source:'wikipedia-pageviews'}))};
+      }
+    }catch(error){wikipediaFallback={ok:false,error:String(error?.message||error)};}
+  }
   const sources={
+    wikipediaFallback,
     google:{ok:!!from(0),count:combined.counts.google,raw:g.length},
     bluesky:{ok:!!from(1),count:combined.counts.bluesky,raw:b.length},
     googleNews:{ok:!!from(2),count:combined.counts.googleNews,raw:gn.words.length,headlines:gn.headlines},
@@ -228,8 +243,8 @@ async function buildFeed(){
   };
   const failed=settled.map((r,i)=>r.status==='rejected'?{provider:i<4?['google','bluesky','googleNews','yahooNews'][i]:NEWS_QUERIES[i-4],error:String(r.reason?.message||'error')}:null).filter(Boolean);
   if(!combined.items.length)return json({error:'NO_LIVE_WORDS',sources,failed,live_count:0,sample_count:0},503);
-  return json({source:'public-trends',region:'Google Trends Japan; Bluesky public/global; Japanese published news RSS',
-    updated_at:new Date().toISOString(),rank_method:'Game-order of real RSS search terms, SNS topics and recent headline terms; NOT a unified popularity ranking',
+  return json({source:'public-trends',region:wikipediaFallback?.ok?'Japanese Wikipedia historical pageviews (not live)': 'Google Trends Japan; Bluesky public/global; Japanese published news RSS',
+    updated_at:new Date().toISOString(),rank_method:wikipediaFallback?.ok?'Historical Japanese Wikipedia pageviews, not live trending terms':'Game-order of real RSS search terms, SNS topics and recent headline terms; NOT a unified popularity ranking',
     sources,failed,person_count:combined.person_count,unclassified_count:combined.unclassified_count,
     person_limit:combined.person_limit,candidate_count:combined.candidate_count,filtered_count:combined.filtered_count,
     live_count:combined.items.length,sample_count:0,items:combined.items});
@@ -237,7 +252,7 @@ async function buildFeed(){
 
 export async function onRequestGet({request,waitUntil}){
   const url=new URL(request.url);
-  const key=new Request(`${url.origin}/api/trends?edition=live-only-v0911`,{method:'GET'});
+  const key=new Request(`${url.origin}/api/trends?edition=live-with-wikipedia-fallback-v2`,{method:'GET'});
   const cache=typeof caches!=='undefined'&&caches.default?caches.default:null;
   if(cache){try{const hit=await cache.match(key);if(hit)return hit;}catch(_){/* cache unavailable */}}
   if(!pending)pending=buildFeed().finally(()=>pending=null);
