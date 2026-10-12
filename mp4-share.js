@@ -5,11 +5,12 @@ if(window.__jijiMp4Bridge)return;window.__jijiMp4Bridge=true;console.info('JIJI 
 // Prefer native H.264/AAC MP4 capture where the browser actually supports it.
 // Preserve the constructor API and avoid FFmpeg initialization on those browsers.
 const NativeRecorder=window.MediaRecorder;
+const desktop=!/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 // A bare MP4 MIME type can still contain Opus audio. X requires AAC.
 // Only bypass conversion when both H.264 video and AAC audio are advertised.
 const nativeTypes=['video/mp4;codecs="avc1.42E01E,mp4a.40.2"'];
 const chosenType=nativeTypes.find(t=>NativeRecorder?.isTypeSupported?.(t));
-if(chosenType){
+if(chosenType&&desktop){
   window.MediaRecorder=new Proxy(NativeRecorder,{
     construct(target,args,newTarget){
       const options={...(args[1]||{}),mimeType:chosenType};
@@ -23,7 +24,6 @@ if(chosenType){
 const originalClick=HTMLAnchorElement.prototype.click,createURL=URL.createObjectURL.bind(URL);
 let active=false,mp4File=null,dialog=null,ffmpeg=null,sourceURL=null;
 // Normal phone recording/sharing is known to work. Limit extra click interception to desktop.
-const desktop=!/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 const approvedDownloads=new WeakSet();
 
 function ui(message){if(!dialog){dialog=document.createElement('section');dialog.id='jiji-mp4-share';dialog.style.cssText='position:fixed;bottom:10px;left:50%;transform:translateX(-50%);z-index:2147483647;background:#090909;color:white;border:1px solid #aaa;padding:12px;min-width:270px;max-width:calc(100vw - 32px);font:13px system-ui;text-align:center';dialog.innerHTML='<p id="jiji-mp4-status"></p><button id="jiji-mp4-close">閉じる</button>';document.body.append(dialog);dialog.querySelector('#jiji-mp4-close').onclick=()=>{dialog.remove();dialog=null;};}dialog.querySelector('#jiji-mp4-status').textContent=message;}
@@ -128,24 +128,24 @@ async function convert(url,downloadName){
    await ff.deleteFile('output.mp4').catch(()=>{});
  }catch(e){
    console.error('JIJI compatible MP4 export failed',e);
-   ui('MP4変換できませんでした: '+problem(e)+'。互換性のない動画をMP4として保存することはしません。');
-   if(dialog&&!dialog.querySelector('#jiji-original-backup')){
-     const button=document.createElement('button');
-     button.id='jiji-original-backup';
-     button.textContent='元の録画を保存（投稿互換性は保証されません）';
-     button.onclick=()=>{
-       const link=document.createElement('a');
-       link.download=(downloadName||'JIJI-FIGHTER-original.webm');
-       link.href=sourceURL;originalClick.call(link);
-     };
-     dialog.append(button);
-   }
+   // Never lose the video: an unconverted backup saves automatically.
+   // Its extension stays .webm if that is what the recorder produced.
+   const fallbackName=/\.(?:mp4|webm)$/i.test(downloadName||'')?downloadName:
+     'JIJI-FIGHTER-original.webm';
+   ui('PC用MP4変換に失敗しました: '+problem(e)+'。元の録画を自動保存しました。Linux変換ツールでH.264/AACのMP4にできます。');
+   try{
+     const link=document.createElement('a');
+     link.download=fallbackName;link.href=sourceURL;
+     approvedDownloads.add(link);
+     originalClick.call(link);
+   }catch(downloadError){console.error('Recording backup failed',downloadError);}
+
  }finally{active=false;}
 }
 HTMLAnchorElement.prototype.click=function(){
  const name=this.download||'';
  // Intercept BOTH mp4 and webm. Native mp4 can contain unsupported Opus audio.
- if(!approvedDownloads.has(this)&&this.href.startsWith('blob:')&&/\.(?:webm|mp4)$/i.test(name)){
+ if(desktop&&!approvedDownloads.has(this)&&this.href.startsWith('blob:')&&/\.(?:webm|mp4)$/i.test(name)){
    void convert(this.href,name);
    return;
  }
