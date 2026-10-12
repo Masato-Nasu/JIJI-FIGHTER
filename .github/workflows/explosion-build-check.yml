@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - build.mjs
+      - mp4-share.js
       - scripts/test-music.mjs
       - scripts/test-recorded-audio.mjs
       - scripts/test-sfx-recording.mjs
