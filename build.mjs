@@ -1,3 +1,4 @@
+import {upgradeGameplay} from './gameplay-upgrade.mjs';
 import {mkdir,rm,cp} from 'node:fs/promises';
 const root=new URL('./',import.meta.url),out=new URL('./dist/',root);
 await rm(out,{recursive:true,force:true});await mkdir(out,{recursive:true});
@@ -8,6 +9,7 @@ console.log('Ready: dist/ (Cloudflare Pages Functions remain in functions/)');
 import {readFile,writeFile} from 'node:fs/promises';
 const outputHtml=new URL('./dist/index.html',import.meta.url);
 let html=await readFile(outputHtml,'utf8');
+html=upgradeGameplay(html);
 const replacements=[
  ["const DESTRUCTION_SECONDS=1.8;","const DESTRUCTION_SECONDS=2.4;"],
  ["const center=shipPoint(0,0),scale=clamp(Math.min(W,H)/720,.55,1.2);","const center=shipPoint(0,0),scale=clamp(Math.min(W,H)/680,.62,1.45);"],
@@ -366,14 +368,14 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
   const path = new URL('./dist/index.html', import.meta.url);
   const html = await fs.readFile(path, 'utf8');
   const oldLabel = '<span class="index">V. 0.9.12</span>';
-  const newLabel = '<span class="index">V. 0.11.16</span>';
+  const newLabel = '<span class="index">V. 0.12.0</span>';
   if (!html.includes(oldLabel) && !html.includes(newLabel)) {
     throw new Error('Version label mismatch: refusing silent publication');
   }
   if (html.includes(oldLabel)) {
     await fs.writeFile(path, html.replace(oldLabel, newLabel), 'utf8');
   }
-  console.log('Built JIJI FIGHTER with display version V. 0.11.16');
+  console.log('Built JIJI FIGHTER with display version V. 0.12.0');
 }
 
 
