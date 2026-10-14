@@ -71,6 +71,26 @@ const patches=[
   [
     "    const title=P(0,43,z);",
     "    // Unfold rotating armor rings as the fortress changes form.\n    if(boss.phase>=2&&!boss.won){\n      for(let ring=0;ring<(boss.phase===3?3:1);ring++){\n        const pts=[],radius=29+ring*8,spin=(boss.clock||0)*(.45+ring*.16);\n        for(let i=0;i<=16;i++){\n          const angle=i*Math.PI/8+spin*(ring%2?-1:1);\n          pts.push(P(Math.cos(angle)*radius,GROUND_Y+Math.sin(angle)*radius,z+Math.sin(angle*2)*8));\n        }\n        path2(pts,bossOpen()?.8:.35,1.5);\n      }\n    }\n    const title=P(0,43,z);"
+  ],
+  [
+    "realm:(i+j)%2===0?'upper':'lower',stage:i+1",
+    "realm:(i+j)%2===0?'upper':'lower',stage:i+1,first:j===0,realmLocked:false"
+  ],
+  [
+    "  function hud(){",
+    "  function lockFirstWallRealm(){\n    if(mode!=='playing')return;\n    const wall=BARRIERS.find(b=>b.stage===wave&&b.first);\n    if(!wall||wall.realmLocked)return;\n    const z=wall.at-travel+10;\n    if(z>=9&&z<=225){wall.realm=underground?'lower':'upper';wall.realmLocked=true;}\n  }\n  function hud(){\n    lockFirstWallRealm();"
+  ],
+  [
+    "    guideWallAt=null;guideFinished=false;",
+    "    guideWallAt=null;guideFinished=false;\n    for(const wall of BARRIERS)wall.realmLocked=false;"
+  ],
+  [
+    "    syncSurfaceMode();\n    flipClock",
+    "    syncSurfaceMode();\n    lockFirstWallRealm();\n    flipClock"
+  ],
+  [
+    "      if(z<9||z>225)continue;",
+    "      if(z<9||z>225||(barrier.first&&!barrier.realmLocked))continue;"
   ]
 ];
 for(const [before,after] of patches){if(!html.includes(before))throw new Error("Gameplay patch mismatch");html=html.replace(before,after);}

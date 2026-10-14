@@ -29,3 +29,15 @@ let rotated=false,drawn=false;
 const screen=vm.createContext({DPR:2,viewRoll:Math.PI,ctx:{save(){},restore(){},setTransform(...args){assert.deepEqual(args,[2,0,0,2,0,0]);},rotate(){rotated=true;},fillText(){drawn=true;}}});
 vm.runInContext(fn('screenText'),screen);vm.runInContext("screenText('案内',100,100)",screen);assert.ok(drawn&&!rotated,'screen labels do not inherit mirror rotation');
 console.log(`PASS: syntax, first-wall-only guidance, upright text, armor windows, weapon/cooldown, locked aim, 3 forms, realm switching, victory. Ideal continuous-hit boss duration: ${seconds.toFixed(1)}s. Browser feel remains unverified.`);
+
+for(let stage=1;stage<=6;stage++)for(const lower of [false,true]){
+ const wall={at:1000,stage,first:true,realmLocked:false,realm:'upper'};
+ const c=vm.createContext({mode:'playing',wave:stage,travel:780,underground:lower,BARRIERS:[wall]});
+ vm.runInContext(fn('lockFirstWallRealm'),c);
+ vm.runInContext('lockFirstWallRealm()',c);assert.equal(wall.realmLocked,false,'not visible yet');
+ c.travel=790;vm.runInContext('lockFirstWallRealm()',c);
+ assert.equal(wall.realm,lower?'lower':'upper');assert.equal(wall.realmLocked,true);
+ c.underground=!lower;vm.runInContext('lockFirstWallRealm()',c);
+ assert.equal(wall.realm,lower?'lower':'upper','wall stays fixed after appearance');
+}
+console.log('PASS: all six stages, both realms, first wall follows player at appearance and never follows evasive movement.');
