@@ -2,6 +2,8 @@ name: Validate game build and BGM
 on:
   push:
     paths:
+      - index.html
+      - scripts/test-touch-pause.mjs
       - build.mjs
       - mp4-share.js
       - linux-recording-export.mjs
@@ -55,6 +57,8 @@ jobs:
           npx playwright install --with-deps chromium chrome
       - name: Play BGM in desktop and mobile browsers
         run: node scripts/test-music.mjs
+      - name: Verify touch input and automatic pause behavior
+        run: node scripts/test-touch-pause.mjs
       - name: Verify lethal enemy shots trigger visible explosion on phones and PCs
         run: node scripts/test-lethal-projectiles.mjs
       - name: Install audio analyzer

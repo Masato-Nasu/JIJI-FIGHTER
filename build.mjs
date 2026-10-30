@@ -9,6 +9,23 @@ console.log('Ready: dist/ (Cloudflare Pages Functions remain in functions/)');
 import {readFile,writeFile} from 'node:fs/promises';
 const outputHtml=new URL('./dist/index.html',import.meta.url);
 let html=await readFile(outputHtml,'utf8');
+// Visible touch focus changes must not interrupt a mission on mobile Safari.
+for(const [before,after] of [
+ [String.raw`  addEventListener('blur',()=>{held.clear();pressedAxis.clear();shootHeld=false;bombHeld=false;els.fire.classList.remove('firing');if(mode==='playing')pause();});`,String.raw`  addEventListener('blur',ev=>{
+    // Mobile Safari can lose window focus during a touch while still visible.
+    // Use visibilitychange for backgrounding on touch devices instead.
+    if(ev.target!==window||(!document.hidden&&matchMedia('(pointer:coarse)').matches))return;
+    held.clear();pressedAxis.clear();pointerDrag=null;shootHeld=false;bombHeld=false;
+    els.fire.classList.remove('firing');if(mode==='playing')pause();
+  });`],
+ [String.raw`  canvas.addEventListener('pointerdown',ev=>{
+    if(mode!=='playing')return;`,String.raw`  canvas.addEventListener('pointerdown',ev=>{
+    if(mode!=='playing')return;
+    ev.preventDefault();`]
+]){
+ if(html.split(before).length!==2)throw Error('Touch pause patch mismatch');
+ html=html.replace(before,after);
+}
 html=upgradeGameplay(html);
 const replacements=[
  ["const DESTRUCTION_SECONDS=1.8;","const DESTRUCTION_SECONDS=2.4;"],
@@ -368,14 +385,14 @@ console.log('Mobile BGM route repaired; native playback and recording prepared i
   const path = new URL('./dist/index.html', import.meta.url);
   const html = await fs.readFile(path, 'utf8');
   const oldLabel = '<span class="index">V. 0.9.12</span>';
-  const newLabel = '<span class="index">V. 0.12.2</span>';
+  const newLabel = '<span class="index">V. 0.12.3</span>';
   if (!html.includes(oldLabel) && !html.includes(newLabel)) {
     throw new Error('Version label mismatch: refusing silent publication');
   }
   if (html.includes(oldLabel)) {
     await fs.writeFile(path, html.replace(oldLabel, newLabel), 'utf8');
   }
-  console.log('Built JIJI FIGHTER with display version V. 0.12.2');
+  console.log('Built JIJI FIGHTER with display version V. 0.12.3');
 }
 
 
